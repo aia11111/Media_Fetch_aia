@@ -1,0 +1,8 @@
+﻿dist/
+build/
+downloads/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+/deno.exe

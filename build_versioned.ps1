@@ -52,11 +52,11 @@ if (-not (Test-Path $mainInternal)) {
 $releaseRoot = Join-Path $root 'dist\releases'
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 
-$versionedName = "YouTubeDownloader_v${newVersion}_codex.exe"
-$bundleName = [System.IO.Path]::GetFileNameWithoutExtension($versionedName)
+$bundleName = 'YouTubeDownloader_codex'
+$releaseName = "${bundleName}.exe"
 $releaseBundleDir = Join-Path $releaseRoot $bundleName
-$versionedRelease = Join-Path $releaseBundleDir $versionedName
-$versionedMain = Join-Path $root "dist\main\main_v${newVersion}_codex.exe"
+$releaseExe = Join-Path $releaseBundleDir $releaseName
+$releaseMain = Join-Path $root "dist\main\${releaseName}"
 $releaseInternal = Join-Path $releaseBundleDir '_internal'
 
 New-Item -ItemType Directory -Force -Path $releaseBundleDir | Out-Null
@@ -65,12 +65,12 @@ if (Test-Path $releaseInternal) {
 }
 Copy-Item -Path $mainInternal -Destination $releaseInternal -Recurse -Force
 
-Copy-Item -Path $mainExe -Destination $versionedRelease -Force
-Copy-Item -Path $mainExe -Destination $versionedMain -Force
+Copy-Item -Path $mainExe -Destination $releaseExe -Force
+Copy-Item -Path $mainExe -Destination $releaseMain -Force
 
 Write-Host "Done."
 Write-Host "- main: $mainExe"
-Write-Host "- versioned (dist/main): $versionedMain"
+Write-Host "- release copy (dist/main): $releaseMain"
 Write-Host "- bundle (dist/releases): $releaseBundleDir"
-Write-Host "- versioned exe (dist/releases): $versionedRelease"
+Write-Host "- release exe (dist/releases): $releaseExe"
 Write-Host "- release dependencies: $releaseInternal"

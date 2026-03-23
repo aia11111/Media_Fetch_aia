@@ -5,6 +5,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 customtkinter_datas = [
     ('c:/users/zipsh/appdata/local/programs/python/python314/lib/site-packages/customtkinter', 'customtkinter/'),
 ]
+app_datas = [
+    ('VERSION', '.'),
+]
 gallery_dl_datas = collect_data_files('gallery_dl')
 gallery_dl_hiddenimports = collect_submodules('gallery_dl')
 
@@ -13,7 +16,7 @@ a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=customtkinter_datas + gallery_dl_datas,
+    datas=customtkinter_datas + app_datas + gallery_dl_datas,
     hiddenimports=['gui', 'downloader', *gallery_dl_hiddenimports],
     hookspath=[],
     hooksconfig={},

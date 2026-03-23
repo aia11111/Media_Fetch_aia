@@ -11,6 +11,7 @@ import glob
 import re
 import json
 import time
+import sys
 import webbrowser
 from datetime import datetime
 
@@ -47,6 +48,8 @@ class App(ctk.CTk):
         self.font_small = ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(12))
 
         self.configure(fg_color=self.colors["bg_app"])
+
+        self.release_version, self.release_updated_at = self._load_release_metadata()
 
         self.title("YouTube Downloader")
         self.geometry("1040x860")
@@ -166,6 +169,40 @@ class App(ctk.CTk):
 
     def _video_title_size(self, size):
         return max(1, int(round(size * 0.7)))
+
+    def _resource_path(self, *parts):
+        if getattr(sys, "frozen", False):
+            base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_dir, *parts)
+
+    def _load_release_metadata(self):
+        version = "?"
+        updated_at = ""
+        version_path = self._resource_path("VERSION")
+
+        if os.path.exists(version_path):
+            try:
+                with open(version_path, "r", encoding="utf-8") as version_file:
+                    version_text = version_file.read().strip()
+                if version_text:
+                    version = version_text
+            except Exception:
+                pass
+
+            try:
+                updated_at = datetime.fromtimestamp(os.path.getmtime(version_path)).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+
+        return version, updated_at
+
+    def _release_info_text(self):
+        lines = [f"Version v{self.release_version}"]
+        if self.release_updated_at:
+            lines.append(f"Updated {self.release_updated_at}")
+        return "\n".join(lines)
 
 
     def resolve_default_download_path(self):
@@ -570,6 +607,16 @@ class App(ctk.CTk):
             text_color=self.colors["text_secondary"],
         )
         self.subtitle_label.grid(row=1, column=0, pady=(0, 4))
+
+        self.release_info_label = ctk.CTkLabel(
+            self.header_frame,
+            text=self._release_info_text(),
+            font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(11)),
+            text_color=self.colors["text_secondary"],
+            justify="right",
+            anchor="e",
+        )
+        self.release_info_label.place(relx=1.0, x=-4, y=8, anchor="ne")
 
         self.main_column = ctk.CTkFrame(tab, fg_color="transparent")
         self.main_column.grid(row=1, column=0, padx=(28, 14), pady=(0, 18), sticky="nsew")

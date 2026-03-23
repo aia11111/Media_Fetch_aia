@@ -54,12 +54,10 @@ New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 
 $bundleName = 'YouTubeDownloader_codex'
 $releaseName = "${bundleName}.exe"
-$releaseBundleDir = Join-Path $releaseRoot $bundleName
-$releaseExe = Join-Path $releaseBundleDir $releaseName
+$releaseExe = Join-Path $releaseRoot $releaseName
 $releaseMain = Join-Path $root "dist\main\${releaseName}"
-$releaseInternal = Join-Path $releaseBundleDir '_internal'
+$releaseInternal = Join-Path $releaseRoot '_internal'
 
-New-Item -ItemType Directory -Force -Path $releaseBundleDir | Out-Null
 if (Test-Path $releaseInternal) {
     Remove-Item -Path $releaseInternal -Recurse -Force
 }
@@ -71,6 +69,5 @@ Copy-Item -Path $mainExe -Destination $releaseMain -Force
 Write-Host "Done."
 Write-Host "- main: $mainExe"
 Write-Host "- release copy (dist/main): $releaseMain"
-Write-Host "- bundle (dist/releases): $releaseBundleDir"
 Write-Host "- release exe (dist/releases): $releaseExe"
 Write-Host "- release dependencies: $releaseInternal"

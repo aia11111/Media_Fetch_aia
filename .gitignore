@@ -1,10 +1,2 @@
-dist/*
-!dist/releases/
-!dist/releases/**
-build/
-downloads/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-/deno.exe
+# Intentionally left blank.
+# Track the local project tree as-is, including build and dist artifacts.

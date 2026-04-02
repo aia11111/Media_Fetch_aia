@@ -1,4 +1,6 @@
-﻿dist/
+dist/*
+!dist/releases/
+!dist/releases/**
 build/
 downloads/
 __pycache__/

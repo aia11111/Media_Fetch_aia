@@ -2,9 +2,7 @@
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-customtkinter_datas = [
-    ('c:/users/zipsh/appdata/local/programs/python/python314/lib/site-packages/customtkinter', 'customtkinter/'),
-]
+customtkinter_datas = collect_data_files('customtkinter')
 app_datas = [
     ('VERSION', '.'),
 ]

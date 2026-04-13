@@ -51,7 +51,7 @@ class App(ctk.CTk):
 
         self.release_version, self.release_updated_at = self._load_release_metadata()
 
-        self.title("YouTube Downloader")
+        self.title("Video Downloader")
         self.geometry("1040x860")
         self.minsize(920, 700)
         self.resizable(True, True)
@@ -207,7 +207,7 @@ class App(ctk.CTk):
 
     def resolve_default_download_path(self):
         configured = self.settings.get("download_path", "").strip()
-        fallback = os.path.join(os.path.expanduser("~"), "Downloads", "YouTube Downloader")
+        fallback = os.path.join(os.path.expanduser("~"), "Downloads", "Video Downloader")
         candidates = [
             configured,
             fallback,
@@ -594,7 +594,7 @@ class App(ctk.CTk):
 
         self.title_label = ctk.CTkLabel(
             self.header_frame,
-            text="YouTube Downloader",
+            text="Video Downloader",
             font=self.font_h1,
             text_color=self.colors["text_primary"],
         )
@@ -639,7 +639,7 @@ class App(ctk.CTk):
         self.url_entry = ctk.CTkEntry(
             self.main_column,
             textvariable=self.url_var,
-            placeholder_text="Paste YouTube URL here",
+            placeholder_text="Paste video URL here",
             height=50,
             corner_radius=24,
             fg_color=self.colors["surface"],

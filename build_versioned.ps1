@@ -4,9 +4,13 @@
 
 $ErrorActionPreference = 'Stop'
 
-$python = 'C:\Users\zipsh\AppData\Local\Programs\Python\Python314\python.exe'
-if (-not (Test-Path $python)) {
-    throw "Python not found: $python"
+$pythonCandidates = @(
+    'C:\Users\zipsh\AppData\Local\Programs\Python\Python312\python.exe',
+    'C:\Users\zipsh\AppData\Local\Programs\Python\Python314\python.exe'
+)
+$python = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $python) {
+    throw "Python not found. Tried: $($pythonCandidates -join ', ')"
 }
 
 $root = $PSScriptRoot
@@ -52,11 +56,21 @@ if (-not (Test-Path $mainInternal)) {
 $releaseRoot = Join-Path $root 'dist\releases'
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 
-$bundleName = 'YouTubeDownloader_codex'
+$bundleName = 'VideoDownloader_codex'
 $releaseName = "${bundleName}.exe"
 $releaseExe = Join-Path $releaseRoot $releaseName
 $releaseMain = Join-Path $root "dist\main\${releaseName}"
 $releaseInternal = Join-Path $releaseRoot '_internal'
+$legacyReleaseNames = @(
+    (Join-Path $releaseRoot 'YouTubeDownloader_codex.exe'),
+    (Join-Path $root 'dist\main\YouTubeDownloader_codex.exe')
+)
+
+foreach ($legacyRelease in $legacyReleaseNames) {
+    if (Test-Path $legacyRelease) {
+        Remove-Item -Path $legacyRelease -Force
+    }
+}
 
 if (Test-Path $releaseInternal) {
     Remove-Item -Path $releaseInternal -Recurse -Force

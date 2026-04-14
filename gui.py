@@ -17,6 +17,11 @@ from datetime import datetime
 
 from downloader import Downloader
 
+# Per-monitor DPI rescaling in customtkinter causes heavy re-layout when
+# dragging this dense window between monitors with different scaling.
+if sys.platform == "win32":
+    ctk.deactivate_automatic_dpi_awareness()
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -67,6 +72,8 @@ class App(ctk.CTk):
         self.active_download_thread = None
         self.active_download_started_at = 0.0
         self.active_download_last_event_at = 0.0
+        self._last_progress_dispatch_at = 0.0
+        self._last_progress_value = -1.0
         self._ui_task_queue = queue.Queue()
         self.history_query_var = tk.StringVar(value="")
 
@@ -275,19 +282,24 @@ class App(ctk.CTk):
         self._ui_task_queue.put((callback, args))
 
     def _drain_ui_task_queue(self):
+        processed = 0
+        max_tasks_per_tick = 12
+
         try:
-            while True:
+            while processed < max_tasks_per_tick:
                 callback, args = self._ui_task_queue.get_nowait()
                 try:
                     callback(*args)
                 except Exception as exc:
                     print(f"UI task error: {exc}")
+                processed += 1
         except queue.Empty:
             pass
 
         try:
             if self.winfo_exists():
-                self.after(50, self._drain_ui_task_queue)
+                delay = 16 if not self._ui_task_queue.empty() else 50
+                self.after(delay, self._drain_ui_task_queue)
         except (RuntimeError, tk.TclError):
             pass
 
@@ -298,6 +310,23 @@ class App(ctk.CTk):
         self.active_download_thread = None
         self.active_download_started_at = 0.0
         self.active_download_last_event_at = 0.0
+        self._last_progress_dispatch_at = 0.0
+        self._last_progress_value = -1.0
+
+    def _dispatch_progress_update(self, pct, speed, eta, playlist_info=""):
+        now = time.monotonic()
+        last_pct = getattr(self, "_last_progress_value", -1.0)
+        last_at = getattr(self, "_last_progress_dispatch_at", 0.0)
+
+        significant_change = last_pct < 0 or pct >= 100 or pct <= last_pct or (pct - last_pct) >= 1.0
+        interval_elapsed = (now - last_at) >= 0.15
+
+        if not significant_change and not interval_elapsed:
+            return
+
+        self._last_progress_dispatch_at = now
+        self._last_progress_value = pct
+        self._dispatch_to_ui(self.update_progress, pct, speed, eta, playlist_info)
 
     def _monitor_active_download(self):
         try:
@@ -1366,6 +1395,8 @@ class App(ctk.CTk):
             self.last_downloaded_file = ""
             self.active_download_started_at = time.monotonic()
             self._mark_download_activity()
+            self._last_progress_dispatch_at = 0.0
+            self._last_progress_value = -1.0
             item['status'] = 'Downloading'
             self.show_status(f"Downloading: {item['title']}", self.colors["accent"])
             self.update_queue_item_ui(item)
@@ -1923,7 +1954,7 @@ class App(ctk.CTk):
                 speed = d.get('_speed_str', 'N/A')
                 eta = d.get('_eta_str', 'N/A')
 
-                self._dispatch_to_ui(self.update_progress, pct, speed, eta, playlist_info)
+                self._dispatch_progress_update(pct, speed, eta, playlist_info)
             except Exception as e:
                 pass
         elif d['status'] == 'finished':

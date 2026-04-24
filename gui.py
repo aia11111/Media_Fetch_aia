@@ -17,15 +17,26 @@ from datetime import datetime
 
 from downloader import Downloader
 
-# Per-monitor DPI rescaling in customtkinter causes heavy re-layout when
-# dragging this dense window between monitors with different scaling.
+# Windows DPI awareness is enabled in main.py before tkinter starts.
+# Keep customtkinter from re-scaling every widget when crossing monitors;
+# that automatic full-window re-layout is what makes dual-monitor dragging lag.
 if sys.platform == "win32":
     ctk.deactivate_automatic_dpi_awareness()
+    ctk.set_widget_scaling(1.0)
+    ctk.set_window_scaling(1.0)
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class App(ctk.CTk):
+    FONT_SIZE_OPTIONS = {
+        "Normal": 1.10,
+        "Large": 1.25,
+        "XL": 1.35,
+        "XXL": 1.50,
+    }
+    DEFAULT_FONT_SIZE_LABEL = "XL"
+
     def __init__(self, initial_url=None):
         super().__init__()
 
@@ -45,18 +56,37 @@ class App(ctk.CTk):
             "danger": "#FF5A73",
         }
 
+        app_dir = os.path.join(os.path.expanduser("~"), ".new_youtube_downloader")
+        os.makedirs(app_dir, exist_ok=True)
+        self.history_file = os.path.join(app_dir, "download_history.json")
+        self.settings_file = os.path.join(app_dir, "settings.json")
+        self.settings = self.load_settings()
+
         self.ui_font_family = self._resolve_ui_font_family()
-        self.font_scale = 1.0
-        self.font_h1 = ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(28), weight="bold")
-        self.font_h2 = ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(18), weight="bold")
-        self.font_body = ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(13))
-        self.font_small = ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(12))
+        self._font_registry = []
+        self.font_size_label = self._font_size_label_from_settings()
+        self.font_scale = self.FONT_SIZE_OPTIONS[self.font_size_label]
+        self.font_size_var = tk.StringVar(value=self.font_size_label)
+        self.font_h1 = self._make_font(28, weight="bold")
+        self.font_h2 = self._make_font(18, weight="bold")
+        self.font_body = self._make_font(13)
+        self.font_small = self._make_font(12)
+        self.font_release = self._make_font(11)
+        self.font_metric = self._make_font(18, weight="bold")
+        self.font_url_entry = self._make_font(15)
+        self.font_primary_button = self._make_font(17, weight="bold")
+        self.font_badge = self._make_font(11, weight="bold")
+        self.font_link = self._make_font(11, underline=True)
+        self.font_preview_title = self._make_video_title_font(17, weight="bold")
+        self.font_live_title = self._make_video_title_font(13, weight="bold")
+        self.font_item_title = self._make_video_title_font(14, weight="bold")
 
         self.configure(fg_color=self.colors["bg_app"])
 
         self.release_version, self.release_updated_at = self._load_release_metadata()
 
         self.title("Video Downloader")
+        self._apply_window_icon()
         self.geometry("1040x860")
         self.minsize(920, 700)
         self.resizable(True, True)
@@ -76,14 +106,8 @@ class App(ctk.CTk):
         self._last_progress_value = -1.0
         self._ui_task_queue = queue.Queue()
         self.history_query_var = tk.StringVar(value="")
-
-        app_dir = os.path.join(os.path.expanduser("~"), ".new_youtube_downloader")
-        os.makedirs(app_dir, exist_ok=True)
-        self.history_file = os.path.join(app_dir, "download_history.json")
-        self.settings_file = os.path.join(app_dir, "settings.json")
         
         self.history = self.load_history()
-        self.settings = self.load_settings()
         self.default_download_path = self.resolve_default_download_path()
         self.downloader.download_dir = self.default_download_path
 
@@ -106,6 +130,7 @@ class App(ctk.CTk):
 
         self.setup_downloader_tab()
         self.setup_history_tab()
+        self.after(100, self._maximize_on_launch)
         self.bind("<Control-l>", self.focus_url_entry)
         self.bind("<Control-L>", self.focus_url_entry)
         self.bind("<Return>", self.handle_enter_key)
@@ -147,6 +172,65 @@ class App(ctk.CTk):
         except Exception as e:
             print(f"Error saving settings: {e}")
 
+    def _font_size_label_from_settings(self):
+        label = str(self.settings.get("font_size", "")).strip()
+        if label in self.FONT_SIZE_OPTIONS:
+            return label
+
+        legacy_scale = self.settings.get("font_scale")
+        try:
+            legacy_scale = float(legacy_scale)
+        except (TypeError, ValueError):
+            legacy_scale = None
+
+        if legacy_scale:
+            return min(
+                self.FONT_SIZE_OPTIONS,
+                key=lambda option: abs(self.FONT_SIZE_OPTIONS[option] - legacy_scale),
+            )
+
+        return self.DEFAULT_FONT_SIZE_LABEL
+
+    def _make_font(self, size, weight=None, underline=False):
+        font = ctk.CTkFont(
+            family=self.ui_font_family,
+            size=self._scaled_size(size),
+            weight=weight,
+            underline=underline,
+        )
+        self._font_registry.append((font, size, False))
+        return font
+
+    def _make_video_title_font(self, size, weight=None, underline=False):
+        font = ctk.CTkFont(
+            family=self.ui_font_family,
+            size=self._video_title_size(size),
+            weight=weight,
+            underline=underline,
+        )
+        self._font_registry.append((font, size, True))
+        return font
+
+    def _apply_registered_font_scale(self):
+        for font, base_size, is_video_title in list(self._font_registry):
+            try:
+                size = self._video_title_size(base_size) if is_video_title else self._scaled_size(base_size)
+                font.configure(size=size)
+            except Exception:
+                continue
+
+    def on_font_size_change(self, selected_label):
+        if selected_label not in self.FONT_SIZE_OPTIONS:
+            return
+
+        self.font_size_label = selected_label
+        self.font_scale = self.FONT_SIZE_OPTIONS[selected_label]
+        self.settings["font_size"] = selected_label
+        self.settings["font_scale"] = self.font_scale
+        self.save_settings()
+        self._apply_registered_font_scale()
+        self.update_idletasks()
+
 
     def _resolve_ui_font_family(self):
         preferred = [
@@ -175,7 +259,7 @@ class App(ctk.CTk):
         return max(1, int(round(size * self.font_scale)))
 
     def _video_title_size(self, size):
-        return max(1, int(round(size * 0.7)))
+        return max(1, int(round(size * self.font_scale * 0.7)))
 
     def _resource_path(self, *parts):
         if getattr(sys, "frozen", False):
@@ -183,6 +267,29 @@ class App(ctk.CTk):
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(base_dir, *parts)
+
+    def _apply_window_icon(self):
+        icon_path = self._resource_path("assets", "VideoDownloader.ico")
+        if not os.path.exists(icon_path):
+            return
+
+        try:
+            self.iconbitmap(icon_path)
+            self.iconbitmap(default=icon_path)
+        except Exception as exc:
+            print(f"Failed to set window icon: {exc}")
+
+    def _maximize_on_launch(self):
+        try:
+            if sys.platform == "win32":
+                self.state("zoomed")
+            else:
+                self.attributes("-zoomed", True)
+        except Exception:
+            try:
+                self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+            except Exception as exc:
+                print(f"Failed to maximize window: {exc}")
 
     def _load_release_metadata(self):
         version = "?"
@@ -573,7 +680,7 @@ class App(ctk.CTk):
         value_label = ctk.CTkLabel(
             card,
             text=value,
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(18), weight="bold"),
+            font=self.font_metric,
             text_color=self.colors["text_primary"],
         )
         value_label.grid(row=0, column=0, padx=10, pady=(8, 0))
@@ -640,12 +747,36 @@ class App(ctk.CTk):
         self.release_info_label = ctk.CTkLabel(
             self.header_frame,
             text=self._release_info_text(),
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(11)),
+            font=self.font_release,
             text_color=self.colors["text_secondary"],
             justify="right",
             anchor="e",
         )
-        self.release_info_label.place(relx=1.0, x=-4, y=8, anchor="ne")
+        self.release_info_label.place(relx=1.0, x=-4, y=46, anchor="ne")
+
+        self.font_size_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.font_size_frame.place(relx=1.0, x=-4, y=4, anchor="ne")
+        ctk.CTkLabel(
+            self.font_size_frame,
+            text="Font",
+            font=self.font_small,
+            text_color=self.colors["text_secondary"],
+        ).grid(row=0, column=0, padx=(0, 8), sticky="e")
+        self.font_size_menu = ctk.CTkOptionMenu(
+            self.font_size_frame,
+            values=list(self.FONT_SIZE_OPTIONS.keys()),
+            variable=self.font_size_var,
+            command=self.on_font_size_change,
+            font=self.font_small,
+            dropdown_font=self.font_small,
+            fg_color=self.colors["surface_2"],
+            button_color=self.colors["surface_3"],
+            button_hover_color=self.colors["border"],
+            corner_radius=10,
+            width=112,
+            height=38,
+        )
+        self.font_size_menu.grid(row=0, column=1, sticky="e")
 
         self.main_column = ctk.CTkFrame(tab, fg_color="transparent")
         self.main_column.grid(row=1, column=0, padx=(28, 14), pady=(0, 18), sticky="nsew")
@@ -675,7 +806,7 @@ class App(ctk.CTk):
             border_width=1,
             border_color=self.colors["border"],
             text_color=self.colors["text_primary"],
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(15)),
+            font=self.font_url_entry,
         )
         self.url_entry.grid(row=0, column=0, pady=(0, 14), sticky="ew")
         self.url_entry.bind("<FocusIn>", self._select_all_url)
@@ -705,7 +836,7 @@ class App(ctk.CTk):
         self.video_title = ctk.CTkLabel(
             self.info_frame,
             text="Title",
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._video_title_size(17), weight="bold"),
+            font=self.font_preview_title,
             text_color=self.colors["text_primary"],
             anchor="w",
             justify="left",
@@ -755,6 +886,7 @@ class App(ctk.CTk):
             variable=self.type_var,
             command=self.on_type_change,
             font=self.font_body,
+            dropdown_font=self.font_body,
             fg_color=self.colors["surface_2"],
             button_color=self.colors["surface_3"],
             button_hover_color=self.colors["border"],
@@ -769,6 +901,7 @@ class App(ctk.CTk):
             values=["Best", "1080p", "720p", "480p", "360p"],
             variable=self.res_var,
             font=self.font_body,
+            dropdown_font=self.font_body,
             fg_color=self.colors["surface_2"],
             button_color=self.colors["surface_3"],
             button_hover_color=self.colors["border"],
@@ -809,6 +942,7 @@ class App(ctk.CTk):
             variable=self.overwrite_policy_var,
             command=lambda _: self.save_options(),
             font=self.font_body,
+            dropdown_font=self.font_body,
             fg_color=self.colors["surface_2"],
             button_color=self.colors["surface_3"],
             button_hover_color=self.colors["border"],
@@ -841,6 +975,7 @@ class App(ctk.CTk):
             border_color=self.colors["border"],
             state="disabled",
             text_color=self.colors["text_primary"],
+            font=self.font_body,
         )
         self.path_entry.grid(row=1, column=0, padx=(0, 10), pady=(5, 0), sticky="ew")
 
@@ -850,6 +985,7 @@ class App(ctk.CTk):
             width=84,
             height=36,
             corner_radius=10,
+            font=self.font_body,
             fg_color=self.colors["accent"],
             hover_color=self.colors["accent_hover"],
             command=self.browse_path,
@@ -862,6 +998,7 @@ class App(ctk.CTk):
             width=110,
             height=36,
             corner_radius=10,
+            font=self.font_body,
             command=self.open_download_folder,
             fg_color=self.colors["surface_2"],
             hover_color=self.colors["surface_3"],
@@ -873,7 +1010,7 @@ class App(ctk.CTk):
             self.main_column,
             text="Start Download",
             command=self.start_download,
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(17), weight="bold"),
+            font=self.font_primary_button,
             height=52,
             width=250,
             corner_radius=26,
@@ -922,7 +1059,7 @@ class App(ctk.CTk):
         self.live_download_title_label = ctk.CTkLabel(
             self.live_download_frame,
             text="",
-            font=ctk.CTkFont(family=self.ui_font_family, size=self._video_title_size(13), weight="bold"),
+            font=self.font_live_title,
             text_color=self.colors["text_primary"],
             anchor="w",
             justify="left",
@@ -1084,7 +1221,7 @@ class App(ctk.CTk):
             title_lbl = ctk.CTkLabel(
                 frame,
                 text=item["title"],
-                font=ctk.CTkFont(family=self.ui_font_family, size=self._video_title_size(14), weight="bold"),
+                font=self.font_item_title,
                 text_color=self.colors["text_primary"],
                 anchor="w",
                 justify="left",
@@ -1096,7 +1233,7 @@ class App(ctk.CTk):
             status_chip = ctk.CTkLabel(
                 frame,
                 text=item.get("status", "Waiting"),
-                font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(11), weight="bold"),
+                font=self.font_badge,
                 fg_color=badge_bg,
                 text_color=badge_fg,
                 corner_radius=10,
@@ -1466,6 +1603,7 @@ class App(ctk.CTk):
             width=86,
             height=36,
             corner_radius=10,
+            font=self.font_body,
             command=self.clear_history,
             fg_color=self.colors["surface_2"],
             hover_color=self.colors["surface_3"],
@@ -1534,7 +1672,7 @@ class App(ctk.CTk):
             ctk.CTkLabel(
                 frame,
                 text=record.get("title", "Unknown"),
-                font=ctk.CTkFont(family=self.ui_font_family, size=self._video_title_size(14), weight="bold"),
+                font=self.font_item_title,
                 text_color=self.colors["text_primary"],
                 anchor="w",
                 justify="left",
@@ -1557,7 +1695,7 @@ class App(ctk.CTk):
                     frame,
                     text=url_display,
                     text_color="#8BBEFA",
-                    font=ctk.CTkFont(family=self.ui_font_family, size=self._scaled_size(11), underline=True),
+                    font=self.font_link,
                     anchor="w",
                     cursor="hand2",
                 )

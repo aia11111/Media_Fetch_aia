@@ -6,7 +6,7 @@
 
 ## 주요 기능
 
-- YouTube, Instagram, Naver Blog 등 URL 기반 영상 다운로드
+- YouTube, Instagram, Threads, Naver Blog 등 URL 기반 영상 다운로드
 - 비디오 / 오디오 다운로드 선택
 - 해상도 선택 및 자막 다운로드 옵션
 - 중복 파일 감지 및 `묻기 / 덮어쓰기 / 건너뛰기` 정책
@@ -97,8 +97,10 @@ powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1 -NoBump
 ## 참고 사항
 
 - 인스타그램 다운로드는 공개 URL 기준으로 `yt-dlp` 우선, 필요 시 `gallery-dl` fallback 경로를 사용합니다.
+- Threads 다운로드는 `yt-dlp`가 직접 지원하지 않는 URL을 내부 GraphQL 미디어 정보로 보완해 처리합니다.
 - Naver Blog 영상은 블로그 본문에서 `vid/inkey`를 추출해 실제 영상 다운로드를 시도합니다.
-- 듀얼 모니터 환경에서 창 이동 렉을 줄이기 위해 `customtkinter`의 자동 DPI 재스케일을 비활성화했습니다.
+- Windows 시작 단계에서 Per-monitor DPI v2를 우선 적용하고, 실패 시 구버전 DPI 설정으로 fallback합니다.
+- Tkinter 글자 스케일은 현재 창이 위치한 모니터 DPI에 맞춰 보정합니다.
 
 ## 저장소 구성
 
@@ -107,4 +109,3 @@ powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1 -NoBump
 - `main.py`: 앱 진입점 및 URL 프로토콜 등록
 - `main.spec`: PyInstaller 설정
 - `build_versioned.ps1`: 빌드 및 릴리즈 스크립트
-

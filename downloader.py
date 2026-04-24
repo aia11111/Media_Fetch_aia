@@ -1,8 +1,10 @@
 import html
+import http.cookiejar
 import json
 import os
 import re
 import shutil
+import subprocess
 import threading
 import urllib.request
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
@@ -25,6 +27,34 @@ class Downloader:
         ("firefox", ("APPDATA", "Mozilla", "Firefox", "Profiles")),
     )
     NAVER_BLOG_HOSTS = ("blog.naver.com", "m.blog.naver.com")
+    THREADS_HOSTS = ("threads.com", "www.threads.com", "threads.net", "www.threads.net")
+    THREADS_APP_ID = "238260118697367"
+    THREADS_GRAPHQL_DOC_ID = "26603434399279533"
+    THREADS_CURL_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    THREADS_SHORTCODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    THREADS_RELAY_PROVIDER_DEFAULTS = {
+        "__relay_internal__pv__BarcelonaHasInlineReplyComposerrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasDearAlgoConsumptionrelayprovider": False,
+        "__relay_internal__pv__BarcelonaIsLoggedInrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasEventBadgerelayprovider": False,
+        "__relay_internal__pv__BarcelonaIsSearchDiscoveryEnabledrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasCommunitiesrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasGameScoreSharerelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasPublicViewCountCardrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasCommunityEntityCardrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasScorecardCommunityrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasMusicrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasNewspaperLinkStylerelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasMessagingrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasGhostPostEmojiActivationrelayprovider": False,
+        "__relay_internal__pv__BarcelonaOptionalCookiesEnabledrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasDearAlgoWebProductionrelayprovider": False,
+        "__relay_internal__pv__BarcelonaIsCrawlerrelayprovider": False,
+        "__relay_internal__pv__BarcelonaHasCommunityTopContributorsrelayprovider": False,
+        "__relay_internal__pv__BarcelonaCanSeeSponsoredContentrelayprovider": False,
+        "__relay_internal__pv__BarcelonaShouldShowFediverseM075Featuresrelayprovider": False,
+        "__relay_internal__pv__BarcelonaIsInternalUserrelayprovider": False,
+    }
     DEFAULT_REQUEST_HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
@@ -67,13 +97,28 @@ class Downloader:
 
         return None
 
-    def _download_text(self, url, headers=None):
+    def _download_text(self, url, headers=None, data=None, opener=None):
         request_headers = dict(self.DEFAULT_REQUEST_HEADERS)
         if headers:
-            request_headers.update(headers)
+            for key, value in headers.items():
+                if value is None:
+                    request_headers.pop(key, None)
+                else:
+                    request_headers[key] = value
 
-        request = urllib.request.Request(url, headers=request_headers)
-        with urllib.request.urlopen(request) as response:
+        request_data = None
+        if data is not None:
+            if isinstance(data, dict):
+                request_headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+                request_data = urlencode(data).encode("utf-8")
+            elif isinstance(data, str):
+                request_data = data.encode("utf-8")
+            else:
+                request_data = data
+
+        request = urllib.request.Request(url, data=request_data, headers=request_headers)
+        open_request = opener.open if opener else urllib.request.urlopen
+        with open_request(request) as response:
             payload = response.read()
             charset = response.headers.get_content_charset() or "utf-8"
 
@@ -84,6 +129,58 @@ class Downloader:
 
     def _download_json_url(self, url, headers=None):
         return json.loads(self._download_text(url, headers=headers))
+
+    def _download_text_with_curl(self, url):
+        curl_path = shutil.which("curl.exe") or shutil.which("curl")
+        if not curl_path:
+            raise RuntimeError("curl is not available.")
+
+        command = [
+            curl_path,
+            "-L",
+            "-sS",
+            "--max-time",
+            "30",
+            "-A",
+            self.THREADS_CURL_USER_AGENT,
+            url,
+        ]
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        result = subprocess.run(command, capture_output=True, creationflags=creationflags, timeout=35)
+        if result.returncode != 0:
+            error_text = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(error_text or f"curl exited with code {result.returncode}.")
+        return result.stdout.decode("utf-8", errors="replace")
+
+    def _post_form_with_curl(self, url, headers, data):
+        curl_path = shutil.which("curl.exe") or shutil.which("curl")
+        if not curl_path:
+            raise RuntimeError("curl is not available.")
+
+        command = [
+            curl_path,
+            "-L",
+            "-sS",
+            "--max-time",
+            "30",
+            "-A",
+            self.THREADS_CURL_USER_AGENT,
+        ]
+        for key, value in (headers or {}).items():
+            if value is None:
+                continue
+            command.extend(["-H", f"{key}: {value}"])
+
+        for key, value in (data or {}).items():
+            command.extend(["--data-urlencode", f"{key}={value}"])
+
+        command.append(url)
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        result = subprocess.run(command, capture_output=True, creationflags=creationflags, timeout=35)
+        if result.returncode != 0:
+            error_text = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(error_text or f"curl exited with code {result.returncode}.")
+        return result.stdout.decode("utf-8", errors="replace")
 
     def _clean_text(self, value):
         text = html.unescape(value or "")
@@ -121,6 +218,13 @@ class Downloader:
             return "instagram.com" in (url or "").lower()
         return host == "instagram.com" or host.endswith(".instagram.com")
 
+    def _is_threads_url(self, url):
+        try:
+            host = (urlparse(url).netloc or "").lower()
+        except Exception:
+            return "threads.com" in (url or "").lower() or "threads.net" in (url or "").lower()
+        return host in self.THREADS_HOSTS
+
     def _is_naver_blog_url(self, url):
         try:
             host = (urlparse(url).netloc or "").lower()
@@ -150,6 +254,46 @@ class Downloader:
             "is_playlist": False,
             "webpage_url": url,
             "extractor": "instagram",
+        }
+
+    def _threads_shortcode(self, url):
+        try:
+            parts = [part for part in urlparse(url).path.split("/") if part]
+        except Exception:
+            return ""
+
+        for idx, part in enumerate(parts):
+            if part in {"post", "t"} and idx + 1 < len(parts):
+                return parts[idx + 1]
+
+        return parts[-1] if parts else ""
+
+    def _threads_shortcode_to_media_id(self, shortcode):
+        media_id = 0
+        if not shortcode:
+            return ""
+
+        for char in shortcode:
+            index = self.THREADS_SHORTCODE_ALPHABET.find(char)
+            if index < 0:
+                return ""
+            media_id = media_id * 64 + index
+
+        return str(media_id)
+
+    def _build_threads_placeholder_info(self, url):
+        shortcode = self._threads_shortcode(url)
+        title = f"Threads {shortcode}" if shortcode else "Threads Post"
+        return {
+            "id": shortcode or url,
+            "title": title,
+            "thumbnail": None,
+            "duration": None,
+            "formats": [],
+            "entries": [],
+            "is_playlist": False,
+            "webpage_url": url,
+            "extractor": "threads",
         }
 
     def _extract_thumbnail_url(self, info):
@@ -196,6 +340,220 @@ class Downloader:
         normalized.setdefault("webpage_url", url)
         normalized.setdefault("extractor", "instagram")
         return normalized
+
+    def _threads_public_url(self, url):
+        parsed = urlparse(url)
+        return urlunparse(parsed._replace(scheme="https", netloc="www.threads.com", query="", fragment=""))
+
+    def _threads_jazoest(self, token):
+        return "2" + str(sum(ord(char) for char in token or ""))
+
+    def _extract_threads_config(self, webpage):
+        token_match = re.search(r'"LSD",\[\],\{"token":"([^"]+)"', webpage or "")
+        token = token_match.group(1) if token_match else ""
+
+        app_match = re.search(r'"X-IG-App-ID":"([^"]+)"', webpage or "")
+        app_id = app_match.group(1) if app_match else self.THREADS_APP_ID
+
+        return token, app_id
+
+    def _threads_graphql_variables(self, media_id):
+        variables = {"postID": media_id}
+        variables.update(self.THREADS_RELAY_PROVIDER_DEFAULTS)
+        return variables
+
+    def _threads_graphql_payload(self, url):
+        shortcode = self._threads_shortcode(url)
+        media_id = self._threads_shortcode_to_media_id(shortcode)
+        if not media_id:
+            raise RuntimeError("Could not read the Threads post id from this URL.")
+
+        public_url = self._threads_public_url(url)
+        cookie_jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+        try:
+            webpage = self._download_text_with_curl(public_url)
+        except Exception:
+            webpage = self._download_text(public_url, headers={"Accept-Language": None}, opener=opener)
+        lsd_token, app_id = self._extract_threads_config(webpage)
+        if not lsd_token:
+            raise RuntimeError("Could not read the Threads session token.")
+
+        variables = self._threads_graphql_variables(media_id)
+        form = {
+            "__a": "1",
+            "__user": "0",
+            "__comet_req": "29",
+            "lsd": lsd_token,
+            "jazoest": self._threads_jazoest(lsd_token),
+            "fb_api_caller_class": "RelayModern",
+            "fb_api_req_friendly_name": "BarcelonaPostColumnPageQuery",
+            "variables": json.dumps(variables, separators=(",", ":")),
+            "server_timestamps": "true",
+            "doc_id": self.THREADS_GRAPHQL_DOC_ID,
+        }
+        headers = {
+            "Accept": "*/*",
+            "Accept-Language": None,
+            "Origin": "https://www.threads.com",
+            "Referer": public_url,
+            "X-FB-LSD": lsd_token,
+            "X-IG-App-ID": app_id,
+        }
+
+        try:
+            response_text = self._post_form_with_curl("https://www.threads.com/api/graphql/", headers, form)
+        except Exception:
+            response_text = self._download_text("https://www.threads.com/api/graphql/", headers=headers, data=form, opener=opener)
+        if response_text.startswith("for (;;);"):
+            response_text = response_text[len("for (;;);") :]
+
+        payload = json.loads(response_text)
+        media = ((payload.get("data") or {}).get("media") or {})
+        if not media:
+            errors = payload.get("errors") or []
+            if errors and isinstance(errors, list):
+                first_error = errors[0] if isinstance(errors[0], dict) else {}
+                message = first_error.get("summary") or first_error.get("description") or first_error.get("message")
+                if message:
+                    raise RuntimeError(f"Threads API failed: {message}")
+            raise RuntimeError("Threads API did not return a downloadable post.")
+
+        return media
+
+    def _threads_caption_text(self, media):
+        caption = media.get("caption")
+        if isinstance(caption, dict):
+            text = self._clean_text(caption.get("text"))
+            if text:
+                return text
+
+        info = media.get("text_post_app_info")
+        fragments = ((info or {}).get("text_fragments") or {}).get("fragments") if isinstance(info, dict) else []
+        if isinstance(fragments, list):
+            text = self._clean_text(" ".join(fragment.get("plaintext") or "" for fragment in fragments if isinstance(fragment, dict)))
+            if text:
+                return text
+
+        return ""
+
+    def _threads_media_title(self, media, fallback):
+        username = self._clean_text(((media.get("user") or {}).get("username") if isinstance(media.get("user"), dict) else ""))
+        caption = self._threads_caption_text(media)
+        snippet = caption.splitlines()[0] if caption else ""
+        snippet = snippet[:80].rstrip()
+
+        if username and snippet:
+            return f"Threads {username} - {snippet}"
+        if username:
+            return f"Threads {username} {fallback}".strip()
+        return f"Threads {fallback}".strip()
+
+    def _threads_thumbnail_url(self, media):
+        candidates = ((media.get("image_versions2") or {}).get("candidates") or [])
+        if not isinstance(candidates, list):
+            return None
+
+        best = None
+        best_area = -1
+        for candidate in candidates:
+            if not isinstance(candidate, dict) or not candidate.get("url"):
+                continue
+            area = (self._int_or_none(candidate.get("width")) or 0) * (self._int_or_none(candidate.get("height")) or 0)
+            if area >= best_area:
+                best = candidate
+                best_area = area
+
+        return best.get("url") if best else None
+
+    def _threads_video_entry_from_media(self, media, fallback_title):
+        versions = media.get("video_versions") or []
+        if not isinstance(versions, list):
+            return None
+
+        video_url = ""
+        for version in versions:
+            if isinstance(version, dict) and version.get("url"):
+                video_url = version["url"]
+                break
+
+        if not video_url:
+            return None
+
+        title = self._threads_media_title(media, fallback_title)
+        return {
+            "id": media.get("pk") or media.get("id") or fallback_title,
+            "title": title,
+            "url": video_url,
+            "thumbnail": self._threads_thumbnail_url(media),
+            "duration": media.get("video_duration") or media.get("duration"),
+            "width": media.get("original_width"),
+            "height": media.get("original_height"),
+            "ext": "mp4",
+        }
+
+    def _threads_video_entries(self, media, fallback_title):
+        entries = []
+        seen_media = set()
+
+        def visit(candidate):
+            if not isinstance(candidate, dict):
+                return
+
+            media_key = candidate.get("id") or candidate.get("pk") or id(candidate)
+            if media_key in seen_media:
+                return
+            seen_media.add(media_key)
+
+            entry = self._threads_video_entry_from_media(candidate, fallback_title)
+            if entry:
+                entries.append(entry)
+
+            carousel = candidate.get("carousel_media") or []
+            if isinstance(carousel, list):
+                for child in carousel:
+                    visit(child)
+
+            share_info = ((candidate.get("text_post_app_info") or {}).get("share_info") or {})
+            if isinstance(share_info, dict):
+                for key in ("quoted_attachment_post", "quoted_post", "reposted_post"):
+                    visit(share_info.get(key))
+
+        visit(media)
+        return entries
+
+    def _fetch_threads_info(self, url):
+        media = self._threads_graphql_payload(url)
+        shortcode = media.get("code") or self._threads_shortcode(url)
+        fallback_title = shortcode or (media.get("pk") or "")
+        title = self._threads_media_title(media, fallback_title)
+        entries = self._threads_video_entries(media, fallback_title)
+        thumbnail = self._threads_thumbnail_url(media)
+        if entries and entries[0].get("thumbnail"):
+            thumbnail = entries[0]["thumbnail"]
+
+        formats = [
+            {
+                "format_id": f"threads-{index}",
+                "url": entry["url"],
+                "ext": "mp4",
+                "width": entry.get("width"),
+                "height": entry.get("height"),
+            }
+            for index, entry in enumerate(entries, start=1)
+        ]
+
+        return {
+            "id": media.get("pk") or shortcode or url,
+            "title": title,
+            "thumbnail": thumbnail,
+            "duration": entries[0].get("duration") if entries else None,
+            "formats": formats,
+            "entries": entries,
+            "is_playlist": len(entries) > 1,
+            "webpage_url": url,
+            "extractor": "threads",
+        }
 
     def _naver_blog_identity(self, url):
         parsed = urlparse(url)
@@ -606,10 +964,64 @@ class Downloader:
             self._augment_instagram_error(str(last_error), attempted_browsers, available_browsers)
         ) from last_error
 
+    def _threads_outtmpl(self, entry, index, total):
+        prefix = f"{index:03d}_" if total > 1 else ""
+        safe_title = self._safe_filename(entry.get("title") or f"threads_{index}")
+        return os.path.join(self.download_dir, f"{prefix}{safe_title}.%(ext)s")
+
+    def _download_threads_post(self, url, format_type, progress_hook, overwrite):
+        info = self._fetch_threads_info(url)
+        entries = info.get("entries") or []
+        if not entries:
+            raise RuntimeError("No downloadable video was found in this Threads post.")
+
+        total_entries = len(entries)
+        has_ffmpeg = self.ffmpeg_location is not None
+
+        for index, entry in enumerate(entries, start=1):
+            media_url = entry.get("url")
+            if not media_url:
+                continue
+
+            wrapped_hook = self._wrap_naver_blog_progress_hook(progress_hook, index, total_entries)
+            ydl_opts = {
+                "outtmpl": self._threads_outtmpl(entry, index, total_entries),
+                "progress_hooks": [wrapped_hook] if wrapped_hook else [],
+                "quiet": True,
+                "no_warnings": True,
+                "nooverwrites": not overwrite,
+                "overwrites": overwrite,
+                "http_headers": {
+                    **self.DEFAULT_REQUEST_HEADERS,
+                    "Referer": self._threads_public_url(url),
+                },
+            }
+
+            if self.ffmpeg_location:
+                ydl_opts["ffmpeg_location"] = self.ffmpeg_location
+
+            if format_type == "Audio" and has_ffmpeg:
+                ydl_opts["postprocessors"] = [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ]
+
+            self._run_ydl(media_url, ydl_opts, lambda ydl, target=media_url: ydl.download([target]))
+
     def fetch_info(self, url, info_callback, error_callback):
         """Fetches video info asynchronously."""
 
         def fetch():
+            if self._is_threads_url(url):
+                try:
+                    info_callback(self._fetch_threads_info(url))
+                except Exception:
+                    info_callback(self._build_threads_placeholder_info(url))
+                return
+
             if self._is_instagram_url(url):
                 try:
                     info = self._run_ydl(
@@ -713,6 +1125,11 @@ class Downloader:
 
                 if self._is_naver_blog_url(url):
                     self._download_naver_blog_post(url, format_type, resolution, progress_hook, overwrite)
+                    finished_hook()
+                    return
+
+                if self._is_threads_url(url):
+                    self._download_threads_post(url, format_type, progress_hook, overwrite)
                     finished_hook()
                     return
 

@@ -100,6 +100,7 @@ class App(ctk.CTk):
         self.is_downloading = False
         self.current_download_item = None
         self.active_download_thread = None
+        self.active_download_callback_pending = False
         self.active_download_started_at = 0.0
         self.active_download_last_event_at = 0.0
         self._last_progress_dispatch_at = 0.0
@@ -415,6 +416,7 @@ class App(ctk.CTk):
 
     def _reset_active_download(self):
         self.active_download_thread = None
+        self.active_download_callback_pending = False
         self.active_download_started_at = 0.0
         self.active_download_last_event_at = 0.0
         self._last_progress_dispatch_at = 0.0
@@ -444,6 +446,9 @@ class App(ctk.CTk):
                 worker = getattr(self, "active_download_thread", None)
                 item = self.current_download_item
                 if worker and not worker.is_alive():
+                    if getattr(self, "active_download_callback_pending", False):
+                        self.after(500, self._monitor_active_download)
+                        return
                     last_event = self.active_download_last_event_at or self.active_download_started_at
                     idle_for = time.monotonic() - last_event if last_event else 0.0
                     if idle_for >= 2.0 and item.get("status") in ("Downloading", "Processing..."):
@@ -1530,6 +1535,7 @@ class App(ctk.CTk):
             self.is_downloading = True
             self.current_download_item = item
             self.last_downloaded_file = ""
+            self.active_download_callback_pending = False
             self.active_download_started_at = time.monotonic()
             self._mark_download_activity()
             self._last_progress_dispatch_at = 0.0
@@ -2117,11 +2123,14 @@ class App(ctk.CTk):
             self._refresh_live_download_card(item)
 
     def on_download_finished(self):
+        self.active_download_callback_pending = True
+        self._mark_download_activity()
         self._dispatch_to_ui(self._finish_ui)
 
     def _finish_ui(self):
         path = getattr(self, 'last_downloaded_file', '')
         item = getattr(self, 'current_download_item', None)
+        self.active_download_callback_pending = False
 
         try:
             if not item:
@@ -2161,11 +2170,20 @@ class App(ctk.CTk):
             self.after(500, self._process_queue)
 
     def on_download_error(self, err):
+        self.active_download_callback_pending = True
+        self._mark_download_activity()
         self._dispatch_to_ui(self._handle_download_error_ui, str(err) if err else "Unknown error")
 
     def _handle_download_error_ui(self, full_err):
+        self.active_download_callback_pending = False
         print(full_err)
         short_err = full_err.splitlines()[0][:150]
+        item = getattr(self, 'current_download_item', None)
+        if item:
+            item['status'] = 'Error'
+            self.update_queue_item_ui(item)
+            self.refresh_queue_header()
+            self._refresh_live_download_card(item)
         self.show_status(f"Download failed: {short_err}", self.colors["danger"], 10000)
         try:
             messagebox.showerror("?ㅼ슫濡쒕뱶 ?ㅽ뙣", full_err)

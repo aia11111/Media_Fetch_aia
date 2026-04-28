@@ -13,19 +13,28 @@ import yt_dlp
 
 try:
     from gallery_dl import config as gallery_config
+    from gallery_dl import cookies as gallery_cookies
     from gallery_dl import job as gallery_job
 except ImportError:
     gallery_config = None
+    gallery_cookies = None
     gallery_job = None
 
 
 class Downloader:
     BROWSER_COOKIE_SOURCES = (
+        ("firefox", ("APPDATA", "Mozilla", "Firefox", "Profiles")),
         ("edge", ("LOCALAPPDATA", "Microsoft", "Edge", "User Data")),
         ("chrome", ("LOCALAPPDATA", "Google", "Chrome", "User Data")),
         ("brave", ("LOCALAPPDATA", "BraveSoftware", "Brave-Browser", "User Data")),
-        ("firefox", ("APPDATA", "Mozilla", "Firefox", "Profiles")),
     )
+    BROWSER_PROCESS_NAMES = {
+        "firefox": "firefox.exe",
+        "edge": "msedge.exe",
+        "chrome": "chrome.exe",
+        "brave": "brave.exe",
+    }
+    INSTAGRAM_APP_ID = "936619743392459"
     NAVER_BLOG_HOSTS = ("blog.naver.com", "m.blog.naver.com")
     THREADS_HOSTS = ("threads.com", "www.threads.com", "threads.net", "www.threads.net")
     THREADS_APP_ID = "238260118697367"
@@ -130,7 +139,7 @@ class Downloader:
     def _download_json_url(self, url, headers=None):
         return json.loads(self._download_text(url, headers=headers))
 
-    def _download_text_with_curl(self, url):
+    def _download_text_with_curl(self, url, headers=None):
         curl_path = shutil.which("curl.exe") or shutil.which("curl")
         if not curl_path:
             raise RuntimeError("curl is not available.")
@@ -143,8 +152,12 @@ class Downloader:
             "30",
             "-A",
             self.THREADS_CURL_USER_AGENT,
-            url,
         ]
+        for key, value in (headers or {}).items():
+            if value is None:
+                continue
+            command.extend(["-H", f"{key}: {value}"])
+        command.append(url)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         result = subprocess.run(command, capture_output=True, creationflags=creationflags, timeout=35)
         if result.returncode != 0:
@@ -255,6 +268,150 @@ class Downloader:
             "webpage_url": url,
             "extractor": "instagram",
         }
+
+    def _instagram_public_url(self, url):
+        parsed = urlparse(url)
+        segments = [part for part in parsed.path.split("/") if part]
+        container = "p"
+        shortcode = ""
+
+        for idx, part in enumerate(segments):
+            if part in {"reel", "p", "tv", "stories"} and idx + 1 < len(segments):
+                container = part
+                shortcode = segments[idx + 1]
+                break
+
+        if not shortcode:
+            shortcode = self._instagram_shortcode(url)
+
+        if not shortcode:
+            return url
+
+        return f"https://www.instagram.com/{container}/{shortcode}/"
+
+    def _probe_instagram_oembed(self, url):
+        public_url = self._instagram_public_url(url)
+        oembed_url = f"https://www.instagram.com/api/v1/oembed/?{urlencode({'url': public_url})}"
+        headers = {
+            "Accept": "application/json",
+            "X-IG-App-ID": self.INSTAGRAM_APP_ID,
+        }
+        try:
+            payload = self._download_text_with_curl(oembed_url, headers=headers)
+            data = json.loads(payload)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _is_browser_running(self, browser):
+        process_name = self.BROWSER_PROCESS_NAMES.get(browser)
+        if not process_name or os.name != "nt":
+            return False
+
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {process_name}", "/NH"],
+                capture_output=True,
+                text=True,
+                creationflags=creationflags,
+                timeout=5,
+            )
+        except Exception:
+            return False
+
+        output = f"{result.stdout}\n{result.stderr}".lower()
+        return process_name.lower() in output
+
+    def _instagram_cookie_diagnostics(self):
+        if gallery_cookies is None:
+            return False, [], []
+
+        has_instagram_cookies = False
+        diagnostics = []
+        running_locked_browsers = []
+
+        for browser in dict.fromkeys(browser for browser, _ in self.BROWSER_COOKIE_SOURCES):
+            browser_label = browser.title()
+            browser_running = self._is_browser_running(browser)
+            try:
+                jar = gallery_cookies.load_cookies((browser, None, None, None, "instagram.com"))
+                cookie_count = len(jar)
+                if cookie_count > 0:
+                    has_instagram_cookies = True
+                    suffix = " (browser still running)" if browser_running else ""
+                    diagnostics.append(f"{browser_label}: {cookie_count} Instagram cookies found{suffix}")
+                else:
+                    diagnostics.append(f"{browser_label}: no Instagram cookies found")
+            except PermissionError:
+                if browser_running:
+                    running_locked_browsers.append(browser_label)
+                    diagnostics.append(f"{browser_label}: cookie DB is locked because the browser is still running")
+                else:
+                    diagnostics.append(f"{browser_label}: cookie DB is locked by the browser")
+            except Exception as exc:
+                text = self._clean_text(str(exc))
+                lowered = text.lower()
+                if "dpapi" in lowered or "decrypt" in lowered:
+                    diagnostics.append(f"{browser_label}: cookies could not be decrypted")
+                elif "permission denied" in lowered or "winerror 32" in lowered:
+                    if browser_running:
+                        running_locked_browsers.append(browser_label)
+                        diagnostics.append(f"{browser_label}: cookie DB is locked because the browser is still running")
+                    else:
+                        diagnostics.append(f"{browser_label}: cookie DB is locked by the browser")
+                else:
+                    diagnostics.append(f"{browser_label}: {text or exc.__class__.__name__}")
+
+        return has_instagram_cookies, diagnostics, running_locked_browsers
+
+    def _summarize_instagram_error(self, error, label):
+        text = self._clean_text(str(error))
+        lowered = text.lower()
+        if "empty media response" in lowered:
+            return f"{label}: empty media response"
+        if "could not copy" in lowered or "permission denied" in lowered:
+            return f"{label}: browser cookie DB was locked"
+        if "dpapi" in lowered or "decrypt" in lowered:
+            return f"{label}: browser cookies could not be decrypted"
+        if "status 4" in lowered:
+            return f"{label}: no accessible media or cookies"
+        return f"{label}: {text}"
+
+    def _build_instagram_failure_message(self, url, primary_error, gallery_error=None):
+        details = []
+        probe = self._probe_instagram_oembed(url)
+        probe_status = self._clean_text(str(probe.get("status")))
+        probe_title = self._clean_text(probe.get("title") or probe.get("message"))
+        probe_description = self._clean_text(probe.get("description"))
+
+        if probe_status == "fail":
+            reason = probe_title or "This post is not accessible while logged out."
+            if probe_description and probe_description not in reason:
+                reason = f"{reason} {probe_description}"
+            details.append(f"Instagram says this post needs a logged-in account: {reason}")
+
+        has_cookies, cookie_diagnostics, running_locked_browsers = self._instagram_cookie_diagnostics()
+        if cookie_diagnostics:
+            prefix = "Readable Instagram cookies:" if has_cookies else "Browser cookie check:"
+            details.append(f"{prefix} {'; '.join(cookie_diagnostics)}")
+
+        if running_locked_browsers:
+            names = ", ".join(running_locked_browsers)
+            details.append(
+                f"Close these browsers completely before retrying: {names}. "
+                "If they stay in the system tray or background, the app still cannot read their Instagram cookies."
+            )
+        elif has_cookies:
+            details.append("A readable Instagram session exists. Fully close that browser, then try again.")
+        else:
+            details.append("Sign into Instagram in Firefox or Edge on this PC, then fully close that browser and try again.")
+
+        technical = [self._summarize_instagram_error(primary_error, "yt-dlp")]
+        if gallery_error is not None:
+            technical.append(self._summarize_instagram_error(gallery_error, "gallery-dl"))
+        details.append(f"Technical details: {' | '.join(technical)}")
+        return "Instagram download failed. " + " | ".join(details)
 
     def _threads_shortcode(self, url):
         try:
@@ -1204,9 +1361,10 @@ class Downloader:
                             instagram_gallery_error = gallery_exc
                     raise primary_error
             except Exception as e:
-                message = str(e)
-                if instagram_gallery_error is not None:
-                    message = f"yt-dlp failed: {message} | gallery-dl failed: {instagram_gallery_error}"
+                if self._is_instagram_url(url):
+                    message = self._build_instagram_failure_message(url, e, instagram_gallery_error)
+                else:
+                    message = str(e)
                 if "ffmpeg" in message.lower() and self.ffmpeg_location is None:
                     message += " | ffmpeg is missing, so merge/convert failed."
                 error_callback(message)

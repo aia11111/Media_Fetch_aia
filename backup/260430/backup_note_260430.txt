@@ -1,0 +1,37 @@
+backup note 260430
+
+Project: new_youtube_downloader_gpt
+Date: 2026-04-30 KST
+
+Purpose:
+- Check whether upload/handoff documentation lets "컴투" understand the current project state.
+
+Current git state before doc refresh:
+- branch: main
+- local HEAD: 540574a Improve Instagram cookie diagnostics
+- origin/main: 540574a Improve Instagram cookie diagnostics
+- worktree: clean before this documentation refresh
+
+Important current baseline:
+- App name: Video Downloader
+- Source run: python main.py
+- Release exe: dist\releases\VideoDownloader_codex.exe
+- Required release dependency folder: dist\releases\_internal
+- Version file value: 12
+
+Current behavior notes:
+- Supports URL-based video/audio downloads through customtkinter UI.
+- Supports YouTube, Instagram, Threads, and Naver Blog paths.
+- Instagram path uses yt-dlp first, gallery-dl fallback, browser cookie diagnostics, and logged-in/private-access guidance.
+- Threads path supplements unsupported yt-dlp URLs through internal GraphQL media lookup.
+- Naver Blog path extracts vid/inkey from the post page and downloads the actual video.
+
+Documentation refresh done:
+- README.md now mentions Instagram cookie/login diagnostics.
+- docs/PROJECT_READ_FIRST.md now points to latest pushed commit 540574a.
+- handoff logs now describe the latest baseline and next action.
+
+Remaining caution:
+- build/ and dist/ are build artifacts but currently part of the repository history.
+- Before a real release, run python -m py_compile gui.py downloader.py main.py.
+- If release output must be regenerated, use build_versioned.ps1, preferably -NoBump when keeping VERSION unchanged.

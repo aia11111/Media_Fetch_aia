@@ -23,27 +23,28 @@
   - `Video Downloader`
   - `customtkinter + yt-dlp` 기반 Windows용 다운로더
   - 소스 실행과 one-dir 릴리즈 배포를 함께 보는 구조
-- 현재 pushed main:
-  - `d3902eb`
+- 최신 source/build 기준:
+  - `540574a`
 - 현재 local 상태:
-  - `PROJECT_READ_FIRST.md` 를 추가해 front-door 문서 세트를 만들었습니다
-  - `README.md` 와 `BUILD_AND_RELEASE.md` 를 먼저 읽는 기준을 고정했습니다
-  - 문서 closeout 기준으로 `컴원_TO_컴투_HANDOFF_LOG.md` 를 추가했습니다
+  - 2026-04-30 문서 갱신 시작 시점에는 `main` 과 `origin/main` 이 같은 커밋이었습니다
+  - `PROJECT_READ_FIRST.md`, `README.md`, `BUILD_AND_RELEASE.md`, 컴투 read-first/handoff 문서가 있습니다
+  - 최신 기능 기준은 Threads 지원, Instagram 쿠키 진단 개선, Naver Blog 보완 다운로드입니다
 
 ## CURRENT ACTIVE OUTBOUND NOTE
 
 - date/time:
-  - `2026-04-14 KST`
+  - `2026-04-30 KST`
 - user intent:
-  - 프로젝트별 문서 세트를 refactor 형식에 맞춰 정리하되, 판타지는 제외하고 진행
+  - 업로드/인수인계 전에 컴투가 현재 상태를 바로 이해할 수 있는지 문서 상태 확인
 - kept result:
-  - `docs/PROJECT_READ_FIRST.md` 추가
-  - 앱 성격, 실행 기준, build/dist 구분, 업로드 확인 규칙 정리
-  - 이번 문서 closeout 기준으로 `컴원_TO_컴투_HANDOFF_LOG.md` 추가
+  - `PROJECT_READ_FIRST.md` 의 기준 커밋을 `540574a` 로 최신화
+  - Instagram 쿠키 진단 개선, Threads 지원, Naver Blog 처리 기준을 문서 요약에 반영
+  - `README.md` 에 Instagram 실패 진단 동작을 추가 설명
+  - 오늘 날짜 backup note 를 남김
 - risk or ambiguity:
   - 이 프로젝트는 빌드 산출물이 커지기 쉬워서, 실제 업로드 전에는 `build/`, `dist/` 포함 여부를 다시 확인해야 합니다
-  - 현재는 문서 bootstrap 단계라 inbound handoff 세트까지는 아직 없습니다
+  - 현재 build/dist 산출물은 repo 에 포함된 상태이며, 산출물만 직접 수정하지 않는 기준을 유지합니다
 - exact first next step:
-  - 다음 변경이 빌드/배포 관련이면 `README.md`, `BUILD_AND_RELEASE.md`, backup note, handoff 를 같은 턴에 같이 갱신
+  - 실제 배포 전에는 `python -m py_compile gui.py downloader.py main.py` 를 먼저 돌리고, 필요 시 `build_versioned.ps1 -NoBump` 로 릴리즈 폴더를 재확인
 - worktree state:
-  - 문서 추가 상태, 아직 이번 턴 커밋/업로드 전
+  - 문서 최신화 완료, 커밋/업로드 시 `git status --short --branch` 로 재확인

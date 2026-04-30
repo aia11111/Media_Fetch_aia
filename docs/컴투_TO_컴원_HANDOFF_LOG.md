@@ -19,19 +19,22 @@
 ## TOP SUMMARY
 
 - 현재 상태:
-  - downloader 문서 bootstrap 단계
+  - downloader 문서 세트 최신화 단계
 - 현재 기준:
   - `Video Downloader`
   - source run + one-dir build/release line
+  - 최신 source/build 기준 커밋은 `540574a`
 
 ## CURRENT ACTIVE NOTE
 
 - date/time:
-  - `2026-04-14 KST`
+  - `2026-04-30 KST`
 - kept result:
-  - 아직 fresh outbound note 는 없습니다
-  - 현재는 `PROJECT_READ_FIRST.md`, `컴원_TO_컴투_HANDOFF_LOG.md`, `컴투_READ_FIRST.md` 를 갖춘 bootstrap 상태입니다
+  - `PROJECT_READ_FIRST.md` 최신 기준을 `540574a` 로 맞춤
+  - `README.md` 에 Instagram 쿠키/로그인 실패 진단 내용을 보강
+  - `컴원_TO_컴투_HANDOFF_LOG.md` 를 최신 인수인계 요약으로 갱신
+  - `backup/260430/backup_note_260430.txt` 에 오늘 확인 내용을 남김
 - exact first next step:
-  - 실제 빌드/배포/실행 변경이 생기면 그때 이 문서에 outbound 메모를 남깁니다
+  - 다음 코드 변경이 있으면 소스 변경, build/dist 영향, 문서 write-back 여부를 같은 턴에 다시 확인
 - worktree state:
-  - 문서 bootstrap 상태
+  - 문서 최신화 완료, 커밋/업로드 시 `git status --short --branch` 로 재확인

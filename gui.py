@@ -522,6 +522,7 @@ class App(ctk.CTk):
     def _overwrite_policy_label(self, policy_value):
         mapping = {
             "ask": "중복 시 물어보기",
+            "rename": "자동 이름 변경",
             "overwrite": "항상 덮어쓰기",
             "skip": "항상 건너뛰기",
         }
@@ -530,6 +531,7 @@ class App(ctk.CTk):
     def _overwrite_policy_value(self, policy_label):
         mapping = {
             "중복 시 물어보기": "ask",
+            "자동 이름 변경": "rename",
             "항상 덮어쓰기": "overwrite",
             "항상 건너뛰기": "skip",
         }
@@ -630,6 +632,24 @@ class App(ctk.CTk):
             unique.append(path)
 
         return unique
+
+    def _next_duplicate_filename_suffix(self, existing_files):
+        used_numbers = {0}
+        for path in existing_files:
+            stem = os.path.splitext(os.path.basename(path))[0]
+            match = re.search(r" \((\d+)\)$", stem)
+            if match:
+                try:
+                    used_numbers.add(int(match.group(1)))
+                except ValueError:
+                    pass
+            else:
+                used_numbers.add(0)
+
+        next_number = 1
+        while next_number in used_numbers:
+            next_number += 1
+        return f" ({next_number})"
 
     def _prompt_overwrite_for_existing(self, existing_files):
         preview = "\n".join(f"- {os.path.basename(p)}" for p in existing_files[:5])
@@ -943,7 +963,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(self.options_frame, text="Duplicates", font=self.font_small, text_color=self.colors["text_secondary"]).grid(row=3, column=0, sticky="w", pady=(10, 2))
         self.overwrite_policy_menu = ctk.CTkOptionMenu(
             self.options_frame,
-            values=["중복 시 물어보기", "항상 덮어쓰기", "항상 건너뛰기"],
+            values=["중복 시 물어보기", "자동 이름 변경", "항상 덮어쓰기", "항상 건너뛰기"],
             variable=self.overwrite_policy_var,
             command=lambda _: self.save_options(),
             font=self.font_body,
@@ -1504,11 +1524,19 @@ class App(ctk.CTk):
             if item['status'] != 'Waiting':
                 continue
 
+            if duplicate_policy != "rename":
+                item["filename_suffix"] = ""
+
             if not item.get("overwrite", False):
                 existing_files = self._collect_existing_files(item.get("dir", ""), item.get("info"), item.get("url", ""))
                 if existing_files:
                     if duplicate_policy == "overwrite":
                         item["overwrite"] = True
+                    elif duplicate_policy == "rename":
+                        suffix = self._next_duplicate_filename_suffix(existing_files)
+                        item["overwrite"] = False
+                        item["filename_suffix"] = suffix
+                        self.show_status(f"중복 파일이 있어 새 이름으로 저장합니다: {suffix}", self.colors["text_secondary"], 4000)
                     elif duplicate_policy == "skip":
                         existing_path = max(existing_files, key=lambda p: os.path.getmtime(p))
                         item["status"] = "Finished"
@@ -1555,7 +1583,8 @@ class App(ctk.CTk):
                 self.progress_hook,
                 self.on_download_finished,
                 self.on_download_error,
-                item.get("overwrite", False)
+                item.get("overwrite", False),
+                item.get("filename_suffix", "")
             )
             return
 
@@ -2021,6 +2050,7 @@ class App(ctk.CTk):
                 return
 
         overwrite = False
+        filename_suffix = ""
         existing_files = self._collect_existing_files(download_dir, self.current_info, url)
         duplicate_policy = self._overwrite_policy_value(self.overwrite_policy_var.get()) if hasattr(self, "overwrite_policy_var") else self.settings.get("overwrite_policy", "ask")
 
@@ -2030,6 +2060,9 @@ class App(ctk.CTk):
                 return
             if duplicate_policy == "overwrite":
                 overwrite = True
+            elif duplicate_policy == "rename":
+                filename_suffix = self._next_duplicate_filename_suffix(existing_files)
+                self.show_status(f"중복 파일이 있어 새 이름으로 저장합니다: {filename_suffix}", self.colors["text_secondary"], 4000)
             else:
                 preview = "\n".join(f"- {os.path.basename(p)}" for p in existing_files[:5])
                 more = f"\n... 외 {len(existing_files) - 5}개" if len(existing_files) > 5 else ""
@@ -2060,6 +2093,7 @@ class App(ctk.CTk):
             "res": resolution,
             "subs": download_subs,
             "overwrite": overwrite,
+            "filename_suffix": filename_suffix,
             "thumbnail": self.current_info.get("thumbnail") if self.current_info else None,
             "thumbnail_image": None,
             "thumbnail_label": None,

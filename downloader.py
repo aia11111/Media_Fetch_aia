@@ -210,6 +210,12 @@ class Downloader:
         cleaned = cleaned.strip(" .")
         return cleaned or fallback
 
+    def _safe_filename_suffix(self, suffix):
+        text = re.sub(r"\s+", " ", html.unescape(str(suffix or "")))
+        cleaned = re.sub(r'[<>:"/\\|?*]+', "_", text)
+        cleaned = cleaned.rstrip(".")
+        return cleaned if cleaned.strip() else ""
+
     def _update_url_query(self, url, query):
         parsed = urlparse(url)
         merged = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -943,10 +949,11 @@ class Downloader:
 
         return preferred[0]
 
-    def _naver_blog_outtmpl(self, entry, index, total):
+    def _naver_blog_outtmpl(self, entry, index, total, filename_suffix=""):
         prefix = f"{index:03d}_" if total > 1 else ""
         safe_title = self._safe_filename(entry.get("title") or entry.get("post_title") or f"naver_blog_{index}")
-        return os.path.join(self.download_dir, f"{prefix}{safe_title}.%(ext)s")
+        suffix = self._safe_filename_suffix(filename_suffix)
+        return os.path.join(self.download_dir, f"{prefix}{safe_title}{suffix}.%(ext)s")
 
     def _wrap_naver_blog_progress_hook(self, progress_hook, index, total):
         if not progress_hook:
@@ -1121,12 +1128,13 @@ class Downloader:
             self._augment_instagram_error(str(last_error), attempted_browsers, available_browsers)
         ) from last_error
 
-    def _threads_outtmpl(self, entry, index, total):
+    def _threads_outtmpl(self, entry, index, total, filename_suffix=""):
         prefix = f"{index:03d}_" if total > 1 else ""
         safe_title = self._safe_filename(entry.get("title") or f"threads_{index}")
-        return os.path.join(self.download_dir, f"{prefix}{safe_title}.%(ext)s")
+        suffix = self._safe_filename_suffix(filename_suffix)
+        return os.path.join(self.download_dir, f"{prefix}{safe_title}{suffix}.%(ext)s")
 
-    def _download_threads_post(self, url, format_type, progress_hook, overwrite):
+    def _download_threads_post(self, url, format_type, progress_hook, overwrite, filename_suffix=""):
         info = self._fetch_threads_info(url)
         entries = info.get("entries") or []
         if not entries:
@@ -1142,7 +1150,7 @@ class Downloader:
 
             wrapped_hook = self._wrap_naver_blog_progress_hook(progress_hook, index, total_entries)
             ydl_opts = {
-                "outtmpl": self._threads_outtmpl(entry, index, total_entries),
+                "outtmpl": self._threads_outtmpl(entry, index, total_entries, filename_suffix),
                 "progress_hooks": [wrapped_hook] if wrapped_hook else [],
                 "quiet": True,
                 "no_warnings": True,
@@ -1211,7 +1219,7 @@ class Downloader:
 
         threading.Thread(target=fetch, daemon=True).start()
 
-    def _download_naver_blog_post(self, url, format_type, resolution, progress_hook, overwrite):
+    def _download_naver_blog_post(self, url, format_type, resolution, progress_hook, overwrite, filename_suffix=""):
         entries = self._extract_naver_blog_videos(url)
         total_entries = len(entries)
         has_ffmpeg = self.ffmpeg_location is not None
@@ -1235,7 +1243,7 @@ class Downloader:
             wrapped_hook = self._wrap_naver_blog_progress_hook(progress_hook, index, total_entries)
 
             ydl_opts = {
-                "outtmpl": self._naver_blog_outtmpl(entry, index, total_entries),
+                "outtmpl": self._naver_blog_outtmpl(entry, index, total_entries, filename_suffix),
                 "progress_hooks": [wrapped_hook] if wrapped_hook else [],
                 "quiet": True,
                 "no_warnings": True,
@@ -1271,6 +1279,7 @@ class Downloader:
         finished_hook,
         error_callback,
         overwrite=False,
+        filename_suffix="",
     ):
         """Starts download asynchronously."""
 
@@ -1281,12 +1290,12 @@ class Downloader:
                 self._ensure_download_dir()
 
                 if self._is_naver_blog_url(url):
-                    self._download_naver_blog_post(url, format_type, resolution, progress_hook, overwrite)
+                    self._download_naver_blog_post(url, format_type, resolution, progress_hook, overwrite, filename_suffix)
                     finished_hook()
                     return
 
                 if self._is_threads_url(url):
-                    self._download_threads_post(url, format_type, progress_hook, overwrite)
+                    self._download_threads_post(url, format_type, progress_hook, overwrite, filename_suffix)
                     finished_hook()
                     return
 
@@ -1294,9 +1303,9 @@ class Downloader:
                 has_ffmpeg = self.ffmpeg_location is not None
 
                 base_outtmpl = (
-                    os.path.join(self.download_dir, "%(playlist_index)03d_%(title)s.%(ext)s")
+                    os.path.join(self.download_dir, f"%(playlist_index)03d_%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
                     if is_playlist
-                    else os.path.join(self.download_dir, "%(title)s.%(ext)s")
+                    else os.path.join(self.download_dir, f"%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
                 )
 
                 ydl_opts = {

@@ -302,17 +302,34 @@ class Downloader:
                     return value
         return ""
 
+    def _instagram_username_candidate(self, url, info, primary, fallback_title):
+        username = self._instagram_username_from_title(fallback_title)
+        if username and not username.isdigit():
+            return username
+
+        username = self._instagram_metadata_value(info, primary, "uploader", "creator", "channel", "uploader_id")
+        safe_username = self._safe_filename(username, "")
+        if safe_username and not safe_username.isdigit():
+            return safe_username
+
+        try:
+            parts = [part for part in urlparse(url).path.split("/") if part]
+            if len(parts) >= 3 and parts[0] == "stories":
+                return self._safe_filename(parts[1], "")
+        except Exception:
+            pass
+
+        return ""
+
     def _instagram_normalized_title(self, url, info, primary, fallback_title):
         shortcode = (
             self._instagram_shortcode(url)
             or self._instagram_metadata_value(info, primary, "display_id", "id")
         )
-        username = self._instagram_metadata_value(info, primary, "uploader_id", "uploader", "creator", "channel")
-        if not username:
-            username = self._instagram_username_from_title(fallback_title)
+        username = self._instagram_username_candidate(url, info, primary, fallback_title)
 
         parts = ["Instagram"]
-        if username:
+        if username and not (shortcode and shortcode.startswith(f"{username}_")):
             parts.append(self._safe_filename(username))
         if shortcode:
             parts.append(self._safe_filename(shortcode))
@@ -324,7 +341,7 @@ class Downloader:
     def _instagram_ytdlp_outtmpl(self, url, filename_suffix=""):
         suffix = self._safe_filename_suffix(filename_suffix)
         media_key = self._safe_filename(self._instagram_shortcode(url) or "%(id)s", "instagram")
-        return os.path.join(self.download_dir, f"Instagram_%(uploader_id)s_{media_key}{suffix}.%(ext)s")
+        return os.path.join(self.download_dir, f"Instagram_{media_key}{suffix}.%(ext)s")
 
     def _instagram_public_url(self, url):
         parsed = urlparse(url)

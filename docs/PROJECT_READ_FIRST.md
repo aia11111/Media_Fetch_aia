@@ -64,7 +64,7 @@
   - 배포 실행 파일 기준선은 `dist\\releases\\VideoDownloader_codex.exe` + `_internal` 폴더입니다
   - 소스 실행 기준선은 `python main.py` 입니다
 - current build state:
-  - `VERSION` 현재 값은 `14` 입니다
+  - `VERSION` 현재 값은 `15` 입니다
   - `build_versioned.ps1` 가 버전 관리 + PyInstaller 빌드 + 릴리즈 복사를 담당합니다
   - `main.spec` 는 PyInstaller 기준 파일입니다
   - `main.spec` 는 `VERSION`, 앱 아이콘/PNG, `gallery_dl` data/submodule 을 번들에 포함합니다

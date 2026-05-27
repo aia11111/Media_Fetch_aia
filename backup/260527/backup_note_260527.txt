@@ -12,6 +12,7 @@ Build command:
 Build result:
 - VERSION bumped from 12 to 13 for duplicate auto-rename.
 - VERSION bumped from 13 to 14 for Instagram shortcode/id filenames.
+- VERSION bumped from 14 to 15 to remove numeric Instagram account ids from visible titles and saved filenames.
 - dist\releases\VideoDownloader_codex.exe regenerated.
 - dist\releases\_internal refreshed.
 - dist\main\main.exe and dist\main\VideoDownloader_codex.exe regenerated.
@@ -23,12 +24,15 @@ Verification:
 Current release note:
 - The executable now includes the "자동 이름 변경" duplicate filename option.
 - The executable now includes Instagram shortcode/id filename handling.
+- The executable now avoids names like Instagram_70208512756_DXMWBAmGUQI.
 
 Follow-up source change:
 - Instagram filenames should not rely on generic titles like "Video by account".
 - Updated Instagram naming to include the post shortcode/id.
-- For reels/posts, expected filename shape is Instagram_<uploader>_<shortcode>.<ext>.
-- For stories, the unique key includes account and story id.
+- For the visible queue title, expected shape is Instagram_<username>_<shortcode>.
+- For the saved file, expected reel/post shape is Instagram_<shortcode>.<ext> to avoid numeric account ids.
+- For stories, the saved filename includes account and story id.
+- Example: queue title Instagram_alokxmehta_DXMWBAmGUQI, saved file Instagram_DXMWBAmGUQI.mp4.
 
 Build note:
 - The first v14 release copy was blocked because dist\releases\VideoDownloader_codex.exe was running.

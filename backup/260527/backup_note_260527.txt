@@ -1,0 +1,23 @@
+backup note 260527
+
+Project: new_youtube_downloader_gpt
+Date: 2026-05-27 KST
+
+Purpose:
+- Regenerate the Windows one-dir release executable after adding the duplicate auto-rename policy.
+
+Build command:
+- powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1
+
+Build result:
+- VERSION bumped from 12 to 13.
+- dist\releases\VideoDownloader_codex.exe regenerated.
+- dist\releases\_internal refreshed.
+- dist\main\main.exe and dist\main\VideoDownloader_codex.exe regenerated.
+
+Verification:
+- Build completed successfully with PyInstaller.
+- Release exe timestamp is 2026-05-27 KST.
+
+Current release note:
+- The executable now includes the "자동 이름 변경" duplicate filename option.

@@ -216,6 +216,15 @@ class Downloader:
         cleaned = cleaned.rstrip(".")
         return cleaned if cleaned.strip() else ""
 
+    def _next_available_path(self, path):
+        base, ext = os.path.splitext(path)
+        index = 1
+        candidate = f"{base} ({index}){ext}"
+        while os.path.exists(candidate):
+            index += 1
+            candidate = f"{base} ({index}){ext}"
+        return candidate
+
     def _update_url_query(self, url, query):
         parsed = urlparse(url)
         merged = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -257,6 +266,8 @@ class Downloader:
         except Exception:
             return ""
         for idx, part in enumerate(parts):
+            if part == "stories" and idx + 2 < len(parts):
+                return f"{parts[idx + 1]}_{parts[idx + 2]}"
             if part in {"reel", "p", "tv", "stories"} and idx + 1 < len(parts):
                 return parts[idx + 1]
         return parts[-1] if parts else ""
@@ -275,6 +286,46 @@ class Downloader:
             "extractor": "instagram",
         }
 
+    def _instagram_username_from_title(self, title):
+        match = re.match(r"^(?:video|photo|post|reel) by ([^\s]+)$", self._clean_text(title), re.IGNORECASE)
+        if not match:
+            return ""
+        return self._safe_filename(match.group(1), "")
+
+    def _instagram_metadata_value(self, info, primary, *keys):
+        for source in (info, primary):
+            if not isinstance(source, dict):
+                continue
+            for key in keys:
+                value = self._clean_text(source.get(key))
+                if value:
+                    return value
+        return ""
+
+    def _instagram_normalized_title(self, url, info, primary, fallback_title):
+        shortcode = (
+            self._instagram_shortcode(url)
+            or self._instagram_metadata_value(info, primary, "display_id", "id")
+        )
+        username = self._instagram_metadata_value(info, primary, "uploader_id", "uploader", "creator", "channel")
+        if not username:
+            username = self._instagram_username_from_title(fallback_title)
+
+        parts = ["Instagram"]
+        if username:
+            parts.append(self._safe_filename(username))
+        if shortcode:
+            parts.append(self._safe_filename(shortcode))
+
+        if len(parts) > 1:
+            return "_".join(parts)
+        return fallback_title or self._build_instagram_placeholder_info(url).get("title")
+
+    def _instagram_ytdlp_outtmpl(self, url, filename_suffix=""):
+        suffix = self._safe_filename_suffix(filename_suffix)
+        media_key = self._safe_filename(self._instagram_shortcode(url) or "%(id)s", "instagram")
+        return os.path.join(self.download_dir, f"Instagram_%(uploader_id)s_{media_key}{suffix}.%(ext)s")
+
     def _instagram_public_url(self, url):
         parsed = urlparse(url)
         segments = [part for part in parsed.path.split("/") if part]
@@ -282,6 +333,8 @@ class Downloader:
         shortcode = ""
 
         for idx, part in enumerate(segments):
+            if part == "stories" and idx + 2 < len(segments):
+                return f"https://www.instagram.com/stories/{segments[idx + 1]}/{segments[idx + 2]}/"
             if part in {"reel", "p", "tv", "stories"} and idx + 1 < len(segments):
                 container = part
                 shortcode = segments[idx + 1]
@@ -496,7 +549,7 @@ class Downloader:
         if not title:
             title = self._build_instagram_placeholder_info(url).get("title")
 
-        normalized["title"] = title
+        normalized["title"] = self._instagram_normalized_title(url, normalized, primary, title)
         normalized["thumbnail"] = self._extract_thumbnail_url(normalized)
         normalized["duration"] = normalized.get("duration") or (primary.get("duration") if primary else None)
         normalized.setdefault("formats", [])
@@ -1087,7 +1140,31 @@ class Downloader:
             settings.append(((), "cookies", (browser, None, None, None, "instagram.com")))
         return settings
 
-    def _download_instagram_with_gallery_dl(self, url, progress_hook):
+    def _rename_instagram_gallery_download(self, url, source_path, filename_suffix="", overwrite=False):
+        if not source_path or not os.path.exists(source_path):
+            return source_path
+
+        shortcode = self._instagram_shortcode(url)
+        if not shortcode:
+            return source_path
+
+        _, ext = os.path.splitext(source_path)
+        base_name = self._safe_filename(f"Instagram_{shortcode}", "Instagram")
+        target_path = os.path.join(self.download_dir, f"{base_name}{self._safe_filename_suffix(filename_suffix)}{ext}")
+
+        if os.path.normcase(os.path.abspath(source_path)) == os.path.normcase(os.path.abspath(target_path)):
+            return source_path
+
+        if os.path.exists(target_path):
+            if overwrite:
+                os.remove(target_path)
+            else:
+                target_path = self._next_available_path(target_path)
+
+        os.replace(source_path, target_path)
+        return target_path
+
+    def _download_instagram_with_gallery_dl(self, url, progress_hook, filename_suffix="", overwrite=False):
         if not self._gallery_dl_available():
             raise RuntimeError("Instagram fallback is unavailable because gallery-dl is not installed.")
 
@@ -1109,6 +1186,7 @@ class Downloader:
                         if not path or not os.path.exists(path):
                             last_error = RuntimeError(f"gallery-dl reported success via {label}, but no file was created.")
                             continue
+                        path = self._rename_instagram_gallery_download(url, path, filename_suffix, overwrite)
                         if progress_hook:
                             progress_hook(
                                 {
@@ -1302,11 +1380,14 @@ class Downloader:
                 is_playlist = self._is_playlist_url(url)
                 has_ffmpeg = self.ffmpeg_location is not None
 
-                base_outtmpl = (
-                    os.path.join(self.download_dir, f"%(playlist_index)03d_%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
-                    if is_playlist
-                    else os.path.join(self.download_dir, f"%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
-                )
+                if self._is_instagram_url(url):
+                    base_outtmpl = self._instagram_ytdlp_outtmpl(url, filename_suffix)
+                else:
+                    base_outtmpl = (
+                        os.path.join(self.download_dir, f"%(playlist_index)03d_%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
+                        if is_playlist
+                        else os.path.join(self.download_dir, f"%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
+                    )
 
                 ydl_opts = {
                     "outtmpl": base_outtmpl,
@@ -1363,7 +1444,7 @@ class Downloader:
                     primary_error = exc
                     if self._is_instagram_url(url):
                         try:
-                            self._download_instagram_with_gallery_dl(url, progress_hook)
+                            self._download_instagram_with_gallery_dl(url, progress_hook, filename_suffix, overwrite)
                             finished_hook()
                             return
                         except Exception as gallery_exc:

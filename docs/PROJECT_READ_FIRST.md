@@ -59,11 +59,12 @@
   - 중복 파일 처리 정책은 `묻기 / 자동 이름 변경 / 덮어쓰기 / 건너뛰기` 를 지원합니다
   - Threads URL은 내부 GraphQL 미디어 정보로 보완해 다운로드합니다
   - Instagram URL은 `yt-dlp` 우선, `gallery-dl` fallback, 브라우저 쿠키 진단 메시지를 함께 사용합니다
+  - Instagram 파일명은 `Video by 계정명` 같은 중복 제목 대신 shortcode/id를 포함해 저장합니다
   - Naver Blog URL은 본문에서 `vid/inkey`를 찾아 실제 영상 다운로드를 시도합니다
   - 배포 실행 파일 기준선은 `dist\\releases\\VideoDownloader_codex.exe` + `_internal` 폴더입니다
   - 소스 실행 기준선은 `python main.py` 입니다
 - current build state:
-  - `VERSION` 현재 값은 `13` 입니다
+  - `VERSION` 현재 값은 `14` 입니다
   - `build_versioned.ps1` 가 버전 관리 + PyInstaller 빌드 + 릴리즈 복사를 담당합니다
   - `main.spec` 는 PyInstaller 기준 파일입니다
   - `main.spec` 는 `VERSION`, 앱 아이콘/PNG, `gallery_dl` data/submodule 을 번들에 포함합니다

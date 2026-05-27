@@ -98,6 +98,7 @@ powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1 -NoBump
 
 - 인스타그램 다운로드는 공개 URL 기준으로 `yt-dlp` 우선, 필요 시 `gallery-dl` fallback 경로를 사용합니다.
 - 인스타그램 실패 메시지는 브라우저 쿠키 존재 여부, 잠긴 쿠키 DB, 로그인 필요 여부를 함께 진단합니다.
+- 인스타그램 저장 파일명은 계정명만 쓰지 않고 게시물 shortcode/id를 포함해 같은 계정의 여러 영상도 구분합니다.
 - Threads 다운로드는 `yt-dlp`가 직접 지원하지 않는 URL을 내부 GraphQL 미디어 정보로 보완해 처리합니다.
 - Naver Blog 영상은 블로그 본문에서 `vid/inkey`를 추출해 실제 영상 다운로드를 시도합니다.
 - Windows 시작 단계에서 Per-monitor DPI v2를 우선 적용하고, 실패 시 구버전 DPI 설정으로 fallback합니다.

@@ -10,7 +10,8 @@ Build command:
 - powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1
 
 Build result:
-- VERSION bumped from 12 to 13.
+- VERSION bumped from 12 to 13 for duplicate auto-rename.
+- VERSION bumped from 13 to 14 for Instagram shortcode/id filenames.
 - dist\releases\VideoDownloader_codex.exe regenerated.
 - dist\releases\_internal refreshed.
 - dist\main\main.exe and dist\main\VideoDownloader_codex.exe regenerated.
@@ -21,3 +22,14 @@ Verification:
 
 Current release note:
 - The executable now includes the "자동 이름 변경" duplicate filename option.
+- The executable now includes Instagram shortcode/id filename handling.
+
+Follow-up source change:
+- Instagram filenames should not rely on generic titles like "Video by account".
+- Updated Instagram naming to include the post shortcode/id.
+- For reels/posts, expected filename shape is Instagram_<uploader>_<shortcode>.<ext>.
+- For stories, the unique key includes account and story id.
+
+Build note:
+- The first v14 release copy was blocked because dist\releases\VideoDownloader_codex.exe was running.
+- Closed the running process and reran build_versioned.ps1 -NoBump to complete the v14 release folder refresh.

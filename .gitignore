@@ -1,2 +1,10 @@
-# Intentionally left blank.
-# Track the local project tree as-is, including build and dist artifacts.
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec.bak
+.venv/
+venv/
+downloads/
+*.log
+backup/

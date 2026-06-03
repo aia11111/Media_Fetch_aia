@@ -1,113 +1,94 @@
-# Video Downloader
+# Media Fetch AIA
 
-`customtkinter` + `yt-dlp` 기반의 Windows용 영상 다운로더입니다.
+Media Fetch AIA is a Windows desktop downloader built on yt-dlp and gallery-dl, focused on practical media download workflows for YouTube, Instagram, Threads, and Naver Blog. It provides a local GUI, queue-based downloads, history, duplicate handling, thumbnails, subtitles, and Windows URL protocol integration.
 
-현재 앱 이름은 `Video Downloader`이며, 실행 파일은 one-dir 방식으로 배포됩니다.
+![Main downloader screen](assets/screenshots/main.png)
 
-## 주요 기능
+## Features
 
-- YouTube, Instagram, Threads, Naver Blog 등 URL 기반 영상 다운로드
-- 비디오 / 오디오 다운로드 선택
-- 해상도 선택 및 자막 다운로드 옵션
-- 중복 파일 감지 및 `묻기 / 자동 이름 변경 / 덮어쓰기 / 건너뛰기` 정책
-- 대기열 기반 연속 다운로드
-- 썸네일, 히스토리, 파일 열기 UI 제공
-- Windows URL 프로토콜 `yg-download://` 등록 지원
+- Download media from YouTube, Instagram, Threads, Naver Blog, and other yt-dlp supported URLs.
+- Choose video or audio mode, resolution, and subtitle options.
+- Queue multiple downloads and monitor progress from the desktop UI.
+- Keep local download history with thumbnails and quick file access.
+- Handle duplicate files with ask, auto-rename, overwrite, or skip policies.
+- Use yt-dlp first, with gallery-dl fallback support for Instagram workflows.
+- Register the Windows URL protocol `yg-download://` for quick app handoff.
 
-## 현재 실행 파일
+![Download history screen](assets/screenshots/history.png)
 
-최신 릴리즈 실행 경로:
+## Requirements
 
-`dist\\releases\\VideoDownloader_codex.exe`
+- Windows
+- Python 3.12 for source runs
+- ffmpeg available on PATH for the best video merge/conversion support
 
-필수 의존 폴더:
-
-`dist\\releases\\_internal`
-
-주의:
-
-- exe만 단독으로 옮기면 실행되지 않습니다.
-- `_internal` 폴더와 같은 위치에 두고 실행해야 합니다.
-
-## 소스 실행
-
-권장 Python:
-
-- `Python 3.12`
-
-의존성 설치:
+Install Python dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-앱 실행:
+## Run From Source
 
 ```powershell
 python main.py
 ```
 
-## 빌드
+The app stores settings and history under:
 
-문법 확인:
+```text
+%USERPROFILE%\.media_fetch_aia
+```
+
+Older settings from `%USERPROFILE%\.new_youtube_downloader` are copied into the new app folder when available.
+
+The default download folder is:
+
+```text
+%USERPROFILE%\Downloads\Media Fetch AIA
+```
+
+## Releases
+
+Compiled Windows builds should be distributed through GitHub Releases, not committed to the repository.
+
+The packaged app uses a PyInstaller one-dir layout. When building locally, keep the executable and its `_internal` folder together.
+
+## Build
+
+Check syntax:
 
 ```powershell
 python -m py_compile gui.py downloader.py main.py
 ```
 
-빌드 + 릴리즈 복사:
+Build a release bundle:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1
 ```
 
-버전 올리지 않고 현재 버전으로 다시 빌드:
+Build without bumping `VERSION`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build_versioned.ps1 -NoBump
 ```
 
-빌드 스크립트 동작:
+See [docs/BUILD_AND_RELEASE.md](docs/BUILD_AND_RELEASE.md) for the full local build flow.
 
-- `VERSION` 값을 읽고 필요 시 증가
-- `main.spec`로 `PyInstaller` 빌드 실행
-- `dist\\main\\main.exe`를 `dist\\releases\\VideoDownloader_codex.exe`로 복사
-- `dist\\main\\_internal`을 `dist\\releases\\_internal`로 복사
+## Documentation
 
-## 설정 / 기록 위치
+- [Usage Guide](docs/USAGE.md)
+- [Build and Release](docs/BUILD_AND_RELEASE.md)
+- [FAQ](docs/FAQ.md)
 
-앱 설정 폴더:
+## Notes
 
-`%USERPROFILE%\\.new_youtube_downloader`
+- Instagram downloads may require browser cookies depending on the target content.
+- Threads URLs are supplemented with internal media metadata when yt-dlp does not support the URL directly.
+- Naver Blog videos are resolved from blog page video metadata when possible.
+- Respect each platform's terms and only download media you have permission to access.
 
-주요 파일:
+## License
 
-- `settings.json`
-- `download_history.json`
-
-기본 다운로드 폴더:
-
-`%USERPROFILE%\\Downloads\\Video Downloader`
-
-## 현재 버전 체계
-
-- `VERSION` 파일은 두 자리 숫자 형식 사용
-- 예: `12` -> 앱 내부에는 `v12`로 표시
-
-## 참고 사항
-
-- 인스타그램 다운로드는 공개 URL 기준으로 `yt-dlp` 우선, 필요 시 `gallery-dl` fallback 경로를 사용합니다.
-- 인스타그램 실패 메시지는 브라우저 쿠키 존재 여부, 잠긴 쿠키 DB, 로그인 필요 여부를 함께 진단합니다.
-- 인스타그램 저장 파일명은 계정명만 쓰지 않고 게시물 shortcode/id를 포함해 같은 계정의 여러 영상도 구분합니다.
-- Threads 다운로드는 `yt-dlp`가 직접 지원하지 않는 URL을 내부 GraphQL 미디어 정보로 보완해 처리합니다.
-- Naver Blog 영상은 블로그 본문에서 `vid/inkey`를 추출해 실제 영상 다운로드를 시도합니다.
-- Windows 시작 단계에서 Per-monitor DPI v2를 우선 적용하고, 실패 시 구버전 DPI 설정으로 fallback합니다.
-- Tkinter 글자 스케일은 현재 창이 위치한 모니터 DPI에 맞춰 보정합니다.
-
-## 저장소 구성
-
-- `gui.py`: UI
-- `downloader.py`: 다운로드 로직
-- `main.py`: 앱 진입점 및 URL 프로토콜 등록
-- `main.spec`: PyInstaller 설정
-- `build_versioned.ps1`: 빌드 및 릴리즈 스크립트
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

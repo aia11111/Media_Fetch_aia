@@ -12,6 +12,7 @@ import re
 import json
 import time
 import sys
+import shutil
 import webbrowser
 from datetime import datetime
 
@@ -29,6 +30,10 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class App(ctk.CTk):
+    APP_NAME = "Media Fetch AIA"
+    APP_DIR_NAME = ".media_fetch_aia"
+    LEGACY_APP_DIR_NAME = ".new_youtube_downloader"
+
     FONT_SIZE_OPTIONS = {
         "Normal": 1.10,
         "Large": 1.25,
@@ -56,8 +61,7 @@ class App(ctk.CTk):
             "danger": "#FF5A73",
         }
 
-        app_dir = os.path.join(os.path.expanduser("~"), ".new_youtube_downloader")
-        os.makedirs(app_dir, exist_ok=True)
+        app_dir = self._resolve_app_dir()
         self.history_file = os.path.join(app_dir, "download_history.json")
         self.settings_file = os.path.join(app_dir, "settings.json")
         self.settings = self.load_settings()
@@ -85,7 +89,7 @@ class App(ctk.CTk):
 
         self.release_version, self.release_updated_at = self._load_release_metadata()
 
-        self.title("Video Downloader")
+        self.title(self.APP_NAME)
         self._apply_window_icon()
         self.geometry("1040x860")
         self.minsize(920, 700)
@@ -140,6 +144,23 @@ class App(ctk.CTk):
 
         if initial_url:
             self.after(500, lambda: self.auto_start_download_from_url(initial_url))
+
+    def _resolve_app_dir(self):
+        home = os.path.expanduser("~")
+        app_dir = os.path.join(home, self.APP_DIR_NAME)
+        legacy_dir = os.path.join(home, self.LEGACY_APP_DIR_NAME)
+        os.makedirs(app_dir, exist_ok=True)
+
+        for filename in ("download_history.json", "settings.json"):
+            target = os.path.join(app_dir, filename)
+            legacy = os.path.join(legacy_dir, filename)
+            if not os.path.exists(target) and os.path.exists(legacy):
+                try:
+                    shutil.copy2(legacy, target)
+                except Exception:
+                    pass
+
+        return app_dir
 
     def load_history(self):
         if os.path.exists(self.history_file):
@@ -270,7 +291,7 @@ class App(ctk.CTk):
         return os.path.join(base_dir, *parts)
 
     def _apply_window_icon(self):
-        icon_path = self._resource_path("assets", "VideoDownloader.ico")
+        icon_path = self._resource_path("assets", "MediaFetchAIA.ico")
         if not os.path.exists(icon_path):
             return
 
@@ -322,11 +343,12 @@ class App(ctk.CTk):
 
     def resolve_default_download_path(self):
         configured = self.settings.get("download_path", "").strip()
-        fallback = os.path.join(os.path.expanduser("~"), "Downloads", "Video Downloader")
+        fallback = os.path.join(os.path.expanduser("~"), "Downloads", self.APP_NAME)
         candidates = [
             configured,
             fallback,
-            os.path.join(os.path.expanduser("~"), ".new_youtube_downloader", "downloads")
+            os.path.join(os.path.expanduser("~"), self.APP_DIR_NAME, "downloads"),
+            os.path.join(os.path.expanduser("~"), self.LEGACY_APP_DIR_NAME, "downloads"),
         ]
 
         for candidate in candidates:
@@ -521,19 +543,19 @@ class App(ctk.CTk):
 
     def _overwrite_policy_label(self, policy_value):
         mapping = {
-            "ask": "중복 시 물어보기",
-            "rename": "자동 이름 변경",
-            "overwrite": "항상 덮어쓰기",
-            "skip": "항상 건너뛰기",
+            "ask": "Ask before overwrite",
+            "rename": "Auto rename",
+            "overwrite": "Always overwrite",
+            "skip": "Always skip",
         }
         return mapping.get(policy_value, mapping["ask"])
 
     def _overwrite_policy_value(self, policy_label):
         mapping = {
-            "중복 시 물어보기": "ask",
-            "자동 이름 변경": "rename",
-            "항상 덮어쓰기": "overwrite",
-            "항상 건너뛰기": "skip",
+            "Ask before overwrite": "ask",
+            "Auto rename": "rename",
+            "Always overwrite": "overwrite",
+            "Always skip": "skip",
         }
         return mapping.get(policy_label, "ask")
 
@@ -755,7 +777,7 @@ class App(ctk.CTk):
 
         self.title_label = ctk.CTkLabel(
             self.header_frame,
-            text="Video Downloader",
+            text=self.APP_NAME,
             font=self.font_h1,
             text_color=self.colors["text_primary"],
         )
@@ -963,7 +985,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(self.options_frame, text="Duplicates", font=self.font_small, text_color=self.colors["text_secondary"]).grid(row=3, column=0, sticky="w", pady=(10, 2))
         self.overwrite_policy_menu = ctk.CTkOptionMenu(
             self.options_frame,
-            values=["중복 시 물어보기", "자동 이름 변경", "항상 덮어쓰기", "항상 건너뛰기"],
+            values=["Ask before overwrite", "Auto rename", "Always overwrite", "Always skip"],
             variable=self.overwrite_policy_var,
             command=lambda _: self.save_options(),
             font=self.font_body,

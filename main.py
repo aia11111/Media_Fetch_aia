@@ -46,7 +46,7 @@ def set_windows_app_user_model_id():
         return
 
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Codex.VideoDownloader")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AIA.MediaFetchAIA")
     except Exception as exc:
         print(f"Failed to set Windows AppUserModelID: {exc}")
 

@@ -5,8 +5,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 customtkinter_datas = collect_data_files('customtkinter')
 app_datas = [
     ('VERSION', '.'),
-    ('assets/VideoDownloader.ico', 'assets'),
-    ('assets/VideoDownloader.png', 'assets'),
+    ('assets/MediaFetchAIA.ico', 'assets'),
+    ('assets/MediaFetchAIA.png', 'assets'),
 ]
 gallery_dl_datas = collect_data_files('gallery_dl')
 gallery_dl_hiddenimports = collect_submodules('gallery_dl')
@@ -43,7 +43,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/VideoDownloader.ico',
+    icon='assets/MediaFetchAIA.ico',
 )
 coll = COLLECT(
     exe,

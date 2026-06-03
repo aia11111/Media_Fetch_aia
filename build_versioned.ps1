@@ -56,12 +56,14 @@ if (-not (Test-Path $mainInternal)) {
 $releaseRoot = Join-Path $root 'dist\releases'
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 
-$bundleName = 'VideoDownloader_codex'
+$bundleName = 'MediaFetchAIA'
 $releaseName = "${bundleName}.exe"
 $releaseExe = Join-Path $releaseRoot $releaseName
 $releaseMain = Join-Path $root "dist\main\${releaseName}"
 $releaseInternal = Join-Path $releaseRoot '_internal'
 $legacyReleaseNames = @(
+    (Join-Path $releaseRoot 'VideoDownloader_codex.exe'),
+    (Join-Path $root 'dist\main\VideoDownloader_codex.exe'),
     (Join-Path $releaseRoot 'YouTubeDownloader_codex.exe'),
     (Join-Path $root 'dist\main\YouTubeDownloader_codex.exe')
 )

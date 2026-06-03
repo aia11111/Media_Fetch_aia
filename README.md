@@ -81,13 +81,23 @@ See [docs/BUILD_AND_RELEASE.md](docs/BUILD_AND_RELEASE.md) for the full local bu
 - [Usage Guide](docs/USAGE.md)
 - [Build and Release](docs/BUILD_AND_RELEASE.md)
 - [FAQ](docs/FAQ.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Codex Application Summary](docs/CODEX_APPLICATION_SUMMARY.md)
+- [GitHub About Recommendation](docs/GITHUB_ABOUT_RECOMMENDATION.md)
 
 ## Notes
 
 - Instagram downloads may require browser cookies depending on the target content.
 - Threads URLs are supplemented with internal media metadata when yt-dlp does not support the URL directly.
 - Naver Blog videos are resolved from blog page video metadata when possible.
-- Respect each platform's terms and only download media you have permission to access.
+
+## Legal / Ethical Use
+
+This project is intended only for media that the user owns, has permission to download, or is legally allowed to archive. It does not bypass DRM, paywalls, login restrictions, authentication, or platform access controls.
+
+Users are responsible for complying with each platform's terms of service and applicable laws.
 
 ## License
 

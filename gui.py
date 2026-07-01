@@ -1606,7 +1606,8 @@ class App(ctk.CTk):
                 self.on_download_finished,
                 self.on_download_error,
                 item.get("overwrite", False),
-                item.get("filename_suffix", "")
+                item.get("filename_suffix", ""),
+                item.get("info")
             )
             return
 

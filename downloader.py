@@ -205,6 +205,29 @@ class Downloader:
         except (TypeError, ValueError):
             return None
 
+    def _count_or_none(self, value):
+        if isinstance(value, bool) or value is None:
+            return None
+        if isinstance(value, dict):
+            return self._count_or_none(value.get("count"))
+        if isinstance(value, (int, float)):
+            count = int(value)
+            return count if count >= 0 else None
+
+        text = self._clean_text(value).replace(",", "")
+        match = re.match(r"^(\d+(?:\.\d+)?)([kmb])?$", text, re.IGNORECASE)
+        if not match:
+            return None
+
+        number = float(match.group(1))
+        multiplier = {
+            "k": 1_000,
+            "m": 1_000_000,
+            "b": 1_000_000_000,
+        }.get((match.group(2) or "").lower(), 1)
+        count = int(number * multiplier)
+        return count if count >= 0 else None
+
     def _safe_filename(self, name, fallback="video"):
         cleaned = re.sub(r'[<>:"/\\|?*]+', "_", self._clean_text(name))
         cleaned = cleaned.strip(" .")
@@ -302,6 +325,43 @@ class Downloader:
                     return value
         return ""
 
+    def _instagram_like_count(self, info=None, primary=None):
+        keys = (
+            "like_count",
+            "likes",
+            "num_likes",
+            "edge_media_preview_like",
+            "edge_liked_by",
+        )
+        for source in (info, primary):
+            if not isinstance(source, dict):
+                continue
+            for key in keys:
+                count = self._count_or_none(source.get(key))
+                if count is not None:
+                    return count
+
+            entries = source.get("entries") or []
+            if isinstance(entries, list):
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    count = self._instagram_like_count(entry)
+                    if count is not None:
+                        return count
+        return None
+
+    def _instagram_like_filename_suffix(self, info=None, primary=None):
+        count = self._instagram_like_count(info, primary)
+        if count is None:
+            return ""
+        if count >= 10000:
+            return f"_likes{int((count / 10000) + 0.5)}\ub9cc"
+        if count >= 1000:
+            value = f"{count / 1000:.1f}".rstrip("0").rstrip(".")
+            return f"_likes{value}\ucc9c"
+        return f"_likes{count}"
+
     def _instagram_username_candidate(self, url, info, primary, fallback_title):
         username = self._instagram_username_from_title(fallback_title)
         if username and not username.isdigit():
@@ -338,10 +398,11 @@ class Downloader:
             return "_".join(parts)
         return fallback_title or self._build_instagram_placeholder_info(url).get("title")
 
-    def _instagram_ytdlp_outtmpl(self, url, filename_suffix=""):
+    def _instagram_ytdlp_outtmpl(self, url, filename_suffix="", info=None):
         suffix = self._safe_filename_suffix(filename_suffix)
+        like_suffix = self._instagram_like_filename_suffix(info)
         media_key = self._safe_filename(self._instagram_shortcode(url) or "%(id)s", "instagram")
-        return os.path.join(self.download_dir, f"Instagram_{media_key}{suffix}.%(ext)s")
+        return os.path.join(self.download_dir, f"Instagram_{media_key}{suffix}{like_suffix}.%(ext)s")
 
     def _instagram_public_url(self, url):
         parsed = urlparse(url)
@@ -569,6 +630,9 @@ class Downloader:
         normalized["title"] = self._instagram_normalized_title(url, normalized, primary, title)
         normalized["thumbnail"] = self._extract_thumbnail_url(normalized)
         normalized["duration"] = normalized.get("duration") or (primary.get("duration") if primary else None)
+        like_count = self._instagram_like_count(normalized, primary)
+        if like_count is not None:
+            normalized["like_count"] = like_count
         normalized.setdefault("formats", [])
         normalized.setdefault("webpage_url", url)
         normalized.setdefault("extractor", "instagram")
@@ -1157,7 +1221,7 @@ class Downloader:
             settings.append(((), "cookies", (browser, None, None, None, "instagram.com")))
         return settings
 
-    def _rename_instagram_gallery_download(self, url, source_path, filename_suffix="", overwrite=False):
+    def _rename_instagram_gallery_download(self, url, source_path, filename_suffix="", overwrite=False, info=None):
         if not source_path or not os.path.exists(source_path):
             return source_path
 
@@ -1167,7 +1231,10 @@ class Downloader:
 
         _, ext = os.path.splitext(source_path)
         base_name = self._safe_filename(f"Instagram_{shortcode}", "Instagram")
-        target_path = os.path.join(self.download_dir, f"{base_name}{self._safe_filename_suffix(filename_suffix)}{ext}")
+        target_path = os.path.join(
+            self.download_dir,
+            f"{base_name}{self._safe_filename_suffix(filename_suffix)}{self._instagram_like_filename_suffix(info)}{ext}",
+        )
 
         if os.path.normcase(os.path.abspath(source_path)) == os.path.normcase(os.path.abspath(target_path)):
             return source_path
@@ -1181,7 +1248,7 @@ class Downloader:
         os.replace(source_path, target_path)
         return target_path
 
-    def _download_instagram_with_gallery_dl(self, url, progress_hook, filename_suffix="", overwrite=False):
+    def _download_instagram_with_gallery_dl(self, url, progress_hook, filename_suffix="", overwrite=False, info=None):
         if not self._gallery_dl_available():
             raise RuntimeError("Instagram fallback is unavailable because gallery-dl is not installed.")
 
@@ -1203,7 +1270,7 @@ class Downloader:
                         if not path or not os.path.exists(path):
                             last_error = RuntimeError(f"gallery-dl reported success via {label}, but no file was created.")
                             continue
-                        path = self._rename_instagram_gallery_download(url, path, filename_suffix, overwrite)
+                        path = self._rename_instagram_gallery_download(url, path, filename_suffix, overwrite, info)
                         if progress_hook:
                             progress_hook(
                                 {
@@ -1375,6 +1442,7 @@ class Downloader:
         error_callback,
         overwrite=False,
         filename_suffix="",
+        info=None,
     ):
         """Starts download asynchronously."""
 
@@ -1398,7 +1466,7 @@ class Downloader:
                 has_ffmpeg = self.ffmpeg_location is not None
 
                 if self._is_instagram_url(url):
-                    base_outtmpl = self._instagram_ytdlp_outtmpl(url, filename_suffix)
+                    base_outtmpl = self._instagram_ytdlp_outtmpl(url, filename_suffix, info)
                 else:
                     base_outtmpl = (
                         os.path.join(self.download_dir, f"%(playlist_index)03d_%(title)s{self._safe_filename_suffix(filename_suffix)}.%(ext)s")
@@ -1461,7 +1529,7 @@ class Downloader:
                     primary_error = exc
                     if self._is_instagram_url(url):
                         try:
-                            self._download_instagram_with_gallery_dl(url, progress_hook, filename_suffix, overwrite)
+                            self._download_instagram_with_gallery_dl(url, progress_hook, filename_suffix, overwrite, info)
                             finished_hook()
                             return
                         except Exception as gallery_exc:
